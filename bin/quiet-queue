@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# A small owner-aware controller for Omarchy's native notification silencing.
+set -euo pipefail
+
+root="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy-quiet-queue"
+session="$root/session.json"
+mkdir -p "$root"
+
+scan() {
+  local now silent until owned
+  now="$(date +%s)"; silent=false
+  [[ "$(omarchy-shell notifications dndState 2>/dev/null || true)" == on ]] && silent=true
+  until=0; owned=false
+  if [[ -f "$session" ]]; then
+    until="$(jq -r '.until // 0' "$session" 2>/dev/null || printf 0)"
+    owned="$(jq -r '.owned // false' "$session" 2>/dev/null || printf false)"
+    if [[ "$until" =~ ^[0-9]+$ ]] && (( until > 0 && now >= until )); then end; scan; return; fi
+  fi
+  jq -cn --argjson now "$now" --argjson until "${until:-0}" --argjson silent "$silent" --argjson owned "$owned" '{now:$now,until:$until,silenced:$silent,owned:$owned}'
+}
+start() {
+  local seconds="$1" now until owned=false
+  [[ "$seconds" =~ ^(1500|3000)$ ]] || exit 2
+  now="$(date +%s)"; until=$((now + seconds))
+  if [[ "$(omarchy-shell notifications dndState 2>/dev/null || true)" != on ]]; then omarchy-shell notifications setDnd on; owned=true; fi
+  jq -cn --argjson until "$until" --argjson owned "$owned" '{until:$until,owned:$owned}' > "$session"
+  scan
+}
+end() {
+  local owned=false
+  [[ -f "$session" ]] && owned="$(jq -r '.owned // false' "$session" 2>/dev/null || printf false)"
+  if [[ "$owned" == true ]]; then omarchy-shell notifications setDnd off; fi
+  rm -f "$session"
+  scan
+}
+case "${1:---scan}" in
+  --scan) scan ;;
+  --start) start "${2:-}" ;;
+  --end) end ;;
+  *) exit 2 ;;
+esac
