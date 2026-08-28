@@ -2,20 +2,46 @@
 # A small owner-aware controller for Omarchy's native notification silencing.
 set -euo pipefail
 
+# The state directory and session file are PRIVATE: umask is set before anything
+# is created, so no window exists where either is group or world readable.
+# (Marketplace security review, submission #2902.)
+umask 077
 root="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy-quiet-queue"
 session="$root/session.json"
 mkdir -p "$root"
+
+# The session file is user-writable mutable state, so reading it treats it as
+# untrusted input: only a REGULAR file (a symlink could point anywhere; a FIFO
+# would hang the jq that QML polls every five seconds), only up to a fixed byte
+# ceiling, and jq under a hard timeout. Any violation reads as "no session".
+session_max_bytes=4096
+read_session() { # <jq_filter> <default_value>
+  local filter="$1" default="$2" size
+  if [[ ! -f "$session" || -L "$session" ]]; then printf '%s' "$default"; return; fi
+  size="$(stat -c %s "$session" 2>/dev/null || printf 0)"
+  if ! [[ "$size" =~ ^[0-9]+$ ]] || (( size > session_max_bytes )); then printf '%s' "$default"; return; fi
+  timeout 2 jq -r "$filter" "$session" 2>/dev/null || printf '%s' "$default"
+}
+
+# Writes go through a mktemp file created inside the private directory and are
+# renamed into place. Never `> "$session"` directly: a plain redirect follows a
+# pre-existing symlink and could clobber an unintended user-owned file.
+write_session() { # json on stdin
+  local tmp
+  tmp="$(mktemp "$root/.session.XXXXXX")"
+  cat > "$tmp"
+  mv -f "$tmp" "$session"
+}
 
 scan() {
   local now silent until owned
   now="$(date +%s)"; silent=false
   [[ "$(omarchy-shell notifications dndState 2>/dev/null || true)" == on ]] && silent=true
-  until=0; owned=false
-  if [[ -f "$session" ]]; then
-    until="$(jq -r '.until // 0' "$session" 2>/dev/null || printf 0)"
-    owned="$(jq -r '.owned // false' "$session" 2>/dev/null || printf false)"
-    if [[ "$until" =~ ^[0-9]+$ ]] && (( until > 0 && now >= until )); then end; scan; return; fi
-  fi
+  until="$(read_session '.until // 0' 0)"
+  owned="$(read_session '.owned // false' false)"
+  [[ "$until" =~ ^[0-9]+$ ]] || until=0
+  [[ "$owned" == true || "$owned" == false ]] || owned=false
+  if (( until > 0 && now >= until )); then end; scan; return; fi
   jq -cn --argjson now "$now" --argjson until "${until:-0}" --argjson silent "$silent" --argjson owned "$owned" '{now:$now,until:$until,silenced:$silent,owned:$owned}'
 }
 start() {
@@ -23,12 +49,12 @@ start() {
   [[ "$seconds" =~ ^(1500|3000)$ ]] || exit 2
   now="$(date +%s)"; until=$((now + seconds))
   if [[ "$(omarchy-shell notifications dndState 2>/dev/null || true)" != on ]]; then omarchy-shell notifications setDnd on; owned=true; fi
-  jq -cn --argjson until "$until" --argjson owned "$owned" '{until:$until,owned:$owned}' > "$session"
+  jq -cn --argjson until "$until" --argjson owned "$owned" '{until:$until,owned:$owned}' | write_session
   scan
 }
 end() {
-  local owned=false
-  [[ -f "$session" ]] && owned="$(jq -r '.owned // false' "$session" 2>/dev/null || printf false)"
+  local owned
+  owned="$(read_session '.owned // false' false)"
   if [[ "$owned" == true ]]; then omarchy-shell notifications setDnd off; fi
   rm -f "$session"
   scan
