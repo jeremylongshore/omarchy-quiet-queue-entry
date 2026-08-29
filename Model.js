@@ -17,4 +17,5 @@ function timeLabel(seconds) {
 }
 function pillText(state) { return state && state.silenced ? (state.remaining ? "QUIET " + Math.ceil(state.remaining / 60) : "QUIET") : "QUEUE" }
 function tooltipText(state) { return state && state.silenced ? (state.owned ? "Quiet session: " + timeLabel(state.remaining) : "Notifications silenced outside Quiet Queue") : "Notifications are delivering normally" }
-if (typeof module !== "undefined") module.exports = { clean, parseState, timeLabel, pillText, tooltipText }
+function modeHue(state) { return state && state.silenced ? (state.owned ? 0.13 : 0.075) : 0.43 }
+if (typeof module !== "undefined") module.exports = { clean, parseState, timeLabel, pillText, tooltipText, modeHue }

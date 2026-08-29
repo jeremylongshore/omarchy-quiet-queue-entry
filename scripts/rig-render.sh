@@ -52,9 +52,15 @@ REMOTE="$(mktemp -t rigrender-XXXXXX.sh)"
 trap 'rm -f "$TGZ" "$REMOTE"' EXIT
 cat > "$REMOTE" <<REMOTE_EOF
 #!/bin/sh
+set -eu
 MOD="$MOD"; NAME="$NAME"; RES="$RES"
 export XDG_RUNTIME_DIR=/tmp/xdgrt
+export XDG_STATE_HOME=/tmp/quiet-queue-state
+export OMARCHY_PATH=/root/omarchy
+export PATH=/root/omarchy/bin:\$PATH
 mkdir -p \$XDG_RUNTIME_DIR; chmod 700 \$XDG_RUNTIME_DIR
+mkdir -p \$XDG_STATE_HOME
+find \$XDG_STATE_HOME -mindepth 1 -delete
 
 # Start a headless compositor only if one is not already serving.
 if [ ! -e "\$XDG_RUNTIME_DIR/wayland-1" ]; then
@@ -86,21 +92,32 @@ cat > /root/.config/omarchy/shell.json <<JSON
 {"version":1,"bar":{"position":"top","transparent":false,"centerAnchor":"omarchy.clock",
 "layout":{"left":[{"id":"omarchy.workspaces"}],
 "center":[{"id":"omarchy.clock","format":"dddd HH:mm"}],
-"right":[{"id":"\$MOD"}]}},"plugins":["\$MOD"]}
+"right":[{"id":"\$MOD"}]}},"plugins":["omarchy.notifications","\$MOD"]}
 JSON
 
 qs -p /root/omarchy/shell >/tmp/qs-render.log 2>&1 &
 sleep 18
 
+# Put the plugin into its real, useful state through the shipped helper. The
+# shell and helper share XDG_STATE_HOME, so the screenshot proves native DND,
+# ownership, countdown, and the visible end action together.
+omarchy-shell notifications setDnd off >/dev/null
+/root/.config/omarchy/plugins/\$NAME/bin/quiet-queue --start 1500 >/tmp/quiet-start.json
+trap '/root/.config/omarchy/plugins/\$NAME/bin/quiet-queue --end >/dev/null 2>&1 || true' EXIT
+
 echo "===QML WARNINGS==="
 # libEGL/MESA/ZINK noise is the headless software renderer, not the plugin.
 grep -a -iE "cannot assign|is not a type|unable to|no such|ERROR" /tmp/qs-render.log \
-  | grep -av libEGL | grep -av MESA | grep -av ZINK | head -10
+  | grep -av libEGL | grep -av MESA | grep -av ZINK \
+  | grep -av 'pw.loop' | grep -av 'quickshell.service.pipewire.loop' \
+  | grep -av 'org.freedesktop.UPower' | head -10
 
 qs -p /root/omarchy/shell ipc call "\$MOD" toggle 2>/dev/null
 sleep 6
 grim /tmp/rigrender.png 2>/dev/null
 echo "===SHOT=== \$(ls -l /tmp/rigrender.png 2>/dev/null | awk '{print \$5}') bytes"
+/root/.config/omarchy/plugins/\$NAME/bin/quiet-queue --end >/dev/null
+trap - EXIT
 REMOTE_EOF
 
 scp -q "$REMOTE" "$HOST:/tmp/rigrender.sh"

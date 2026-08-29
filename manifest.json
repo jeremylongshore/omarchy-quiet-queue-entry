@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "io.github.jeremylongshore.quiet-queue",
   "name": "Quiet Queue",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Jeremy Longshore",
   "license": "MIT",
-  "description": "An owner-aware focus timer for Omarchy notification silencing.",
+  "description": "Owned 25 or 50 minute focus sessions using Omarchy's native Do Not Disturb service.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Quiet Queue",
-    "description": "Starts bounded native Do Not Disturb sessions without reading or replacing notification history.",
+    "description": "Start a bounded focus session with a live countdown and ownership-safe DND cleanup.",
     "category": "Info",
     "aliases": [
       "quiet-queue",

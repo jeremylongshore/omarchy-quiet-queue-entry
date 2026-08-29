@@ -4,97 +4,199 @@
 # DND ownership read, publication, or cleanup.
 use strict;
 use warnings;
-use Fcntl qw(:DEFAULT);
-use File::Path qw(make_path);
+use Fcntl qw(:DEFAULT :mode :flock);
 use File::Spec;
 use IO::Handle;
 use JSON::PP qw(encode_json decode_json);
 
 umask 0077;
-my $base = $ENV{XDG_STATE_HOME} || File::Spec->catdir($ENV{HOME}, ".local", "state");
-my $root = File::Spec->catdir($base, "omarchy-quiet-queue");
-make_path($root, { mode => 0700 }) unless -d $root;
-my $dir;
-sysopen($dir, $root, O_RDONLY | O_DIRECTORY | O_NOFOLLOW) or die "unsafe state directory\n";
-my @ds = stat($dir);
-die "unsafe state directory\n" unless @ds && -d _ && $ds[4] == $<;
-chmod 0700, $dir;
-chdir $dir or die "cannot pin state directory\n";
+my $SESSION = "session.json";
+my $MAX_BYTES = 4096;
+my ($chain, $dir_fh);
 
-my $session = "session.json";
-my $max_bytes = 4096;
+sub open_state_chain {
+  my $home = $ENV{HOME} // "";
+  my $base = length($ENV{XDG_STATE_HOME} // "")
+    ? $ENV{XDG_STATE_HOME}
+    : File::Spec->catdir($home, ".local", "state");
+  die "state root must be absolute\n" unless File::Spec->file_name_is_absolute($base);
+  my $full = File::Spec->catdir($base, "omarchy-quiet-queue");
+  my @parts = grep { length($_) } File::Spec->splitdir($full);
+  die "unsafe state path\n" if grep { $_ eq "." || $_ eq ".." } @parts;
+
+  my $current;
+  sysopen($current, "/", O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+    or die "cannot pin filesystem root\n";
+  my @chain = ($current);
+  for my $part (@parts) {
+    chdir($current) or die "cannot traverse state path\n";
+    my $next;
+    unless (sysopen($next, $part, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)) {
+      mkdir($part, 0700);
+      sysopen($next, $part, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)
+        or die "unsafe state path component\n";
+    }
+    my @st = stat($next);
+    die "unsafe state path component\n" unless @st && S_ISDIR($st[2]);
+    push @chain, $next;
+    $current = $next;
+  }
+  my @root_stat = stat($current);
+  die "unsafe state directory owner\n"
+    unless @root_stat && S_ISDIR($root_stat[2]) && $root_stat[4] == $<;
+  chmod(0700, $current) or die "cannot privatize state directory\n";
+  chdir($current) or die "cannot retain state directory\n";
+  return (\@chain, $current);
+}
+
+sub open_session_lock {
+  my $fh;
+  sysopen($fh, ".session.lock", O_RDWR | O_CREAT | O_NOFOLLOW, 0600)
+    or die "cannot open private session lock\n";
+  my @st = stat($fh);
+  die "unsafe session lock\n"
+    unless @st && S_ISREG($st[2]) && $st[4] == $<;
+  chmod(0600, $fh) or die "cannot privatize session lock\n";
+  flock($fh, LOCK_EX) or die "cannot lock quiet session\n";
+  return $fh;
+}
 
 sub read_session {
-  return { until => 0, owned => JSON::PP::false() } unless -e $session;
   my $fh;
-  return { until => 0, owned => JSON::PP::false() } unless sysopen($fh, $session, O_RDONLY | O_NONBLOCK | O_NOFOLLOW);
+  return ({ until => 0, owned => JSON::PP::false() }, [])
+    unless sysopen($fh, $SESSION, O_RDONLY | O_NONBLOCK | O_NOFOLLOW);
   my @st = stat($fh);
-  unless (@st && -f _ && $st[4] == $< && $st[7] > 0 && $st[7] <= $max_bytes) { close $fh; return { until => 0, owned => JSON::PP::false() } }
+  unless (@st && S_ISREG($st[2]) && $st[4] == $< && $st[7] > 0 && $st[7] <= $MAX_BYTES) {
+    close $fh;
+    return ({ until => 0, owned => JSON::PP::false() }, []);
+  }
   my $raw = "";
-  while (length($raw) <= $max_bytes) {
+  while (length($raw) <= $MAX_BYTES) {
     my $n = sysread($fh, my $chunk, 4096);
     last unless defined($n) && $n > 0;
     $raw .= $chunk;
   }
   close $fh;
-  return { until => 0, owned => JSON::PP::false() } if length($raw) > $max_bytes;
+  return ({ until => 0, owned => JSON::PP::false() }, []) if length($raw) > $MAX_BYTES;
   my $data = eval { decode_json($raw) };
-  return { until => 0, owned => JSON::PP::false() } unless ref($data) eq "HASH";
+  return ({ until => 0, owned => JSON::PP::false() }, []) unless ref($data) eq "HASH";
   my $until = ($data->{until} || "") =~ /\A\d+\z/ ? 0 + $data->{until} : 0;
   my $owned = $data->{owned} ? JSON::PP::true() : JSON::PP::false();
-  return { until => $until, owned => $owned };
+  return ({ until => $until, owned => $owned }, \@st);
 }
 
 sub open_temp {
-  for (1 .. 32) {
-    my $name = sprintf ".session.%d.%08x", $$, int(rand(0xffffffff));
+  for (1 .. 64) {
+    my $name = sprintf ".session.%d.%08x%08x", $$,
+      int(rand(0xffffffff)), int(rand(0xffffffff));
     my $fh;
-    return ($name, $fh) if sysopen($fh, $name, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
+    if (sysopen($fh, $name, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600)) {
+      chmod(0600, $fh) or die "cannot privatize session temp\n";
+      return ($name, $fh);
+    }
   }
   die "cannot create private session temp\n";
 }
 
+sub same_object {
+  my ($left, $right) = @_;
+  return @$left && @$right
+    && $left->[0] == $right->[0]
+    && $left->[1] == $right->[1]
+    && S_ISREG($left->[2]) && S_ISREG($right->[2]);
+}
+
 sub write_session {
-  my ($data) = @_;
+  my ($data, $dir_fh) = @_;
   my ($temp, $fh) = open_temp();
+  my @opened = stat($fh);
   my $payload = encode_json($data) . "\n";
-  my $offset = 0;
-  while ($offset < length $payload) {
-    my $n = syswrite($fh, substr($payload, $offset));
-    die "session write failed\n" unless defined($n) && $n > 0;
-    $offset += $n;
+  die "session payload exceeded bound\n" if length($payload) > $MAX_BYTES;
+  my $published = 0;
+  my $written = eval {
+    my $offset = 0;
+    while ($offset < length $payload) {
+      my $n = syswrite($fh, substr($payload, $offset));
+      die "session write failed\n" unless defined($n) && $n > 0;
+      $offset += $n;
+    }
+    $fh->sync or die "session fsync failed\n";
+    my @named = lstat($temp);
+    die "session temp identity changed\n"
+      unless same_object(\@opened, \@named);
+    rename $temp, $SESSION or die "session replace failed\n";
+    $published = 1;
+    my @published = lstat($SESSION);
+    die "session publication identity changed\n"
+      unless same_object(\@opened, \@published);
+    $dir_fh->sync or die "session directory fsync failed\n";
+    close $fh or die "session close failed\n";
+    1;
+  };
+  unless ($written) {
+    my $error = $@ || "session publication failed\n";
+    close($fh);
+    unlink($temp) unless $published;
+    die $error;
   }
-  $fh->sync or die "session fsync failed\n";
-  close $fh or die "session close failed\n";
-  rename $temp, $session or die "session replace failed\n";
-  chmod 0600, $session;
 }
 
 sub dnd_on { (qx{omarchy-shell notifications dndState 2>/dev/null} || "") =~ /on/ }
-sub dnd_set { system("omarchy-shell", "notifications", "setDnd", $_[0]); }
+sub dnd_set {
+  system("omarchy-shell", "notifications", "setDnd", $_[0]) == 0
+    or die "native DND update failed\n";
+  my $expected = $_[0] eq "on" ? 1 : 0;
+  die "native DND transition was not applied\n" unless (dnd_on() ? 1 : 0) == $expected;
+}
 
 sub scan {
   my $now = time();
-  my $state = read_session();
+  my ($state) = read_session();
+  my $silenced = dnd_on();
+  # If someone turns DND off outside Quiet Queue, surrender ownership now.
+  # A later external DND-on must not be disabled by our stale session record.
+  if ($state->{owned} && !$silenced) { end_session(0); return scan(); }
   if ($state->{until} > 0 && $now >= $state->{until}) { end_session(); return scan(); }
-  print encode_json({ now => $now, until => $state->{until}, silenced => dnd_on() ? JSON::PP::true() : JSON::PP::false(), owned => $state->{owned} ? JSON::PP::true() : JSON::PP::false() }), "\n";
+  print encode_json({ now => $now, until => $state->{until}, silenced => $silenced ? JSON::PP::true() : JSON::PP::false(), owned => $state->{owned} ? JSON::PP::true() : JSON::PP::false() }), "\n";
 }
 
 sub start {
   my ($seconds) = @_;
   exit 2 unless defined($seconds) && $seconds =~ /\A(?:1500|3000)\z/;
+  my $now = time();
+  my ($previous) = read_session();
   my $owned = JSON::PP::false();
-  if (!dnd_on()) { dnd_set("on"); $owned = JSON::PP::true(); }
-  write_session({ until => time() + $seconds, owned => $owned });
+  my $enabled_now = 0;
+  if (!dnd_on()) {
+    dnd_set("on");
+    $owned = JSON::PP::true();
+    $enabled_now = 1;
+  } elsif ($previous->{owned} && $previous->{until} > $now) {
+    # A second/concurrent start extends the one authoritative session without
+    # discarding the ownership established by its first transition.
+    $owned = JSON::PP::true();
+  }
+  my $written = eval { write_session({ until => $now + $seconds, owned => $owned }, $dir_fh); 1 };
+  unless ($written) {
+    my $error = $@ || "session publication failed\n";
+    dnd_set("off") if $enabled_now;
+    die $error;
+  }
   scan();
 }
 
 sub end_session {
-  my $state = read_session();
-  dnd_set("off") if $state->{owned};
-  unlink $session;
+  my ($disable_owned) = @_;
+  $disable_owned = 1 unless defined $disable_owned;
+  my ($state, $opened) = read_session();
+  dnd_set("off") if $disable_owned && $state->{owned} && dnd_on();
+  my @named = lstat($SESSION);
+  unlink($SESSION) if same_object($opened, \@named);
+  $dir_fh->sync or die "session directory fsync failed\n";
 }
 
+($chain, $dir_fh) = open_state_chain();
+my $session_lock = open_session_lock();
 my $op = $ARGV[0] || "--scan";
 if ($op eq "--scan") { scan() }
 elsif ($op eq "--start") { start($ARGV[1]) }

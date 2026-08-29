@@ -1,10 +1,12 @@
 const fs = require("node:fs")
-const [dir, victim] = process.argv.slice(2)
+const [dir, victim, marker] = process.argv.slice(2)
 const parked = `${dir}.parked`
+fs.writeFileSync(marker, "ready")
 for (;;) {
   try {
     fs.renameSync(dir, parked)
     fs.symlinkSync(victim, dir)
+    fs.writeFileSync(`${marker}.attacked`, "parent")
     fs.unlinkSync(dir)
     fs.renameSync(parked, dir)
   } catch {
