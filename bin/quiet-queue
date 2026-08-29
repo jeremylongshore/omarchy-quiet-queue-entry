@@ -1,67 +1,102 @@
-#!/usr/bin/env bash
-# A small owner-aware controller for Omarchy's native notification silencing.
-set -euo pipefail
+#!/usr/bin/perl
+# Owner-aware controller for Omarchy's native notification silencing.
+# Session state is descriptor-bound so a same-UID path swap cannot redirect a
+# DND ownership read, publication, or cleanup.
+use strict;
+use warnings;
+use Fcntl qw(:DEFAULT);
+use File::Path qw(make_path);
+use File::Spec;
+use IO::Handle;
+use JSON::PP qw(encode_json decode_json);
 
-# The state directory and session file are PRIVATE: umask is set before anything
-# is created, so no window exists where either is group or world readable.
-# (Marketplace security review, submission #2902.)
-umask 077
-root="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy-quiet-queue"
-session="$root/session.json"
-mkdir -p "$root"
+umask 0077;
+my $base = $ENV{XDG_STATE_HOME} || File::Spec->catdir($ENV{HOME}, ".local", "state");
+my $root = File::Spec->catdir($base, "omarchy-quiet-queue");
+make_path($root, { mode => 0700 }) unless -d $root;
+my $dir;
+sysopen($dir, $root, O_RDONLY | O_DIRECTORY | O_NOFOLLOW) or die "unsafe state directory\n";
+my @ds = stat($dir);
+die "unsafe state directory\n" unless @ds && -d _ && $ds[4] == $<;
+chmod 0700, $dir;
+chdir $dir or die "cannot pin state directory\n";
 
-# The session file is user-writable mutable state, so reading it treats it as
-# untrusted input: only a REGULAR file (a symlink could point anywhere; a FIFO
-# would hang the jq that QML polls every five seconds), only up to a fixed byte
-# ceiling, and jq under a hard timeout. Any violation reads as "no session".
-session_max_bytes=4096
-read_session() { # <jq_filter> <default_value>
-  local filter="$1" default="$2" size
-  if [[ ! -f "$session" || -L "$session" ]]; then printf '%s' "$default"; return; fi
-  size="$(stat -c %s "$session" 2>/dev/null || printf 0)"
-  if ! [[ "$size" =~ ^[0-9]+$ ]] || (( size > session_max_bytes )); then printf '%s' "$default"; return; fi
-  timeout 2 jq -r "$filter" "$session" 2>/dev/null || printf '%s' "$default"
+my $session = "session.json";
+my $max_bytes = 4096;
+
+sub read_session {
+  return { until => 0, owned => JSON::PP::false() } unless -e $session;
+  my $fh;
+  return { until => 0, owned => JSON::PP::false() } unless sysopen($fh, $session, O_RDONLY | O_NONBLOCK | O_NOFOLLOW);
+  my @st = stat($fh);
+  unless (@st && -f _ && $st[4] == $< && $st[7] > 0 && $st[7] <= $max_bytes) { close $fh; return { until => 0, owned => JSON::PP::false() } }
+  my $raw = "";
+  while (length($raw) <= $max_bytes) {
+    my $n = sysread($fh, my $chunk, 4096);
+    last unless defined($n) && $n > 0;
+    $raw .= $chunk;
+  }
+  close $fh;
+  return { until => 0, owned => JSON::PP::false() } if length($raw) > $max_bytes;
+  my $data = eval { decode_json($raw) };
+  return { until => 0, owned => JSON::PP::false() } unless ref($data) eq "HASH";
+  my $until = ($data->{until} || "") =~ /\A\d+\z/ ? 0 + $data->{until} : 0;
+  my $owned = $data->{owned} ? JSON::PP::true() : JSON::PP::false();
+  return { until => $until, owned => $owned };
 }
 
-# Writes go through a mktemp file created inside the private directory and are
-# renamed into place. Never `> "$session"` directly: a plain redirect follows a
-# pre-existing symlink and could clobber an unintended user-owned file.
-write_session() { # json on stdin
-  local tmp
-  tmp="$(mktemp "$root/.session.XXXXXX")"
-  cat > "$tmp"
-  mv -f "$tmp" "$session"
+sub open_temp {
+  for (1 .. 32) {
+    my $name = sprintf ".session.%d.%08x", $$, int(rand(0xffffffff));
+    my $fh;
+    return ($name, $fh) if sysopen($fh, $name, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
+  }
+  die "cannot create private session temp\n";
 }
 
-scan() {
-  local now silent until owned
-  now="$(date +%s)"; silent=false
-  [[ "$(omarchy-shell notifications dndState 2>/dev/null || true)" == on ]] && silent=true
-  until="$(read_session '.until // 0' 0)"
-  owned="$(read_session '.owned // false' false)"
-  [[ "$until" =~ ^[0-9]+$ ]] || until=0
-  [[ "$owned" == true || "$owned" == false ]] || owned=false
-  if (( until > 0 && now >= until )); then end; scan; return; fi
-  jq -cn --argjson now "$now" --argjson until "${until:-0}" --argjson silent "$silent" --argjson owned "$owned" '{now:$now,until:$until,silenced:$silent,owned:$owned}'
+sub write_session {
+  my ($data) = @_;
+  my ($temp, $fh) = open_temp();
+  my $payload = encode_json($data) . "\n";
+  my $offset = 0;
+  while ($offset < length $payload) {
+    my $n = syswrite($fh, substr($payload, $offset));
+    die "session write failed\n" unless defined($n) && $n > 0;
+    $offset += $n;
+  }
+  $fh->sync or die "session fsync failed\n";
+  close $fh or die "session close failed\n";
+  rename $temp, $session or die "session replace failed\n";
+  chmod 0600, $session;
 }
-start() {
-  local seconds="$1" now until owned=false
-  [[ "$seconds" =~ ^(1500|3000)$ ]] || exit 2
-  now="$(date +%s)"; until=$((now + seconds))
-  if [[ "$(omarchy-shell notifications dndState 2>/dev/null || true)" != on ]]; then omarchy-shell notifications setDnd on; owned=true; fi
-  jq -cn --argjson until "$until" --argjson owned "$owned" '{until:$until,owned:$owned}' | write_session
-  scan
+
+sub dnd_on { (qx{omarchy-shell notifications dndState 2>/dev/null} || "") =~ /on/ }
+sub dnd_set { system("omarchy-shell", "notifications", "setDnd", $_[0]); }
+
+sub scan {
+  my $now = time();
+  my $state = read_session();
+  if ($state->{until} > 0 && $now >= $state->{until}) { end_session(); return scan(); }
+  print encode_json({ now => $now, until => $state->{until}, silenced => dnd_on() ? JSON::PP::true() : JSON::PP::false(), owned => $state->{owned} ? JSON::PP::true() : JSON::PP::false() }), "\n";
 }
-end() {
-  local owned
-  owned="$(read_session '.owned // false' false)"
-  if [[ "$owned" == true ]]; then omarchy-shell notifications setDnd off; fi
-  rm -f "$session"
-  scan
+
+sub start {
+  my ($seconds) = @_;
+  exit 2 unless defined($seconds) && $seconds =~ /\A(?:1500|3000)\z/;
+  my $owned = JSON::PP::false();
+  if (!dnd_on()) { dnd_set("on"); $owned = JSON::PP::true(); }
+  write_session({ until => time() + $seconds, owned => $owned });
+  scan();
 }
-case "${1:---scan}" in
-  --scan) scan ;;
-  --start) start "${2:-}" ;;
-  --end) end ;;
-  *) exit 2 ;;
-esac
+
+sub end_session {
+  my $state = read_session();
+  dnd_set("off") if $state->{owned};
+  unlink $session;
+}
+
+my $op = $ARGV[0] || "--scan";
+if ($op eq "--scan") { scan() }
+elsif ($op eq "--start") { start($ARGV[1]) }
+elsif ($op eq "--end") { end_session(); scan() }
+else { exit 2 }
