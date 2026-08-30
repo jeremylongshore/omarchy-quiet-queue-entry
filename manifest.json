@@ -5,7 +5,7 @@
   "version": "0.2.0",
   "author": "Jeremy Longshore",
   "license": "MIT",
-  "description": "Owned 25 or 50 minute focus sessions using Omarchy's native Do Not Disturb service.",
+  "description": "Quiet Queue adds a trustworthy focus switch to Omarchy. Start a 25- or 50-minute session, see the countdown in the bar, and return to normal notification delivery when it expires. It uses Omarchy's native Do Not Disturb service: silenced notifications stay in first-party history, and Quiet Queue never reads, uploads, replaces, or discards them. It turns DND off only when it owns the session; existing DND is left alone, and an external change revokes stale ownership. State checks every 5 seconds.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Quiet Queue",
-    "description": "Start a bounded focus session with a live countdown and ownership-safe DND cleanup.",
+    "description": "Quiet Queue adds a trustworthy focus switch to Omarchy. Start a 25- or 50-minute session, see the countdown in the bar, and return to normal notification delivery when it expires. It uses Omarchy's native Do Not Disturb service: silenced notifications stay in first-party history, and Quiet Queue never reads, uploads, replaces, or discards them. It turns DND off only when it owns the session; existing DND is left alone, and an external change revokes stale ownership. State checks every 5 seconds.",
     "category": "Info",
     "aliases": [
       "quiet-queue",
