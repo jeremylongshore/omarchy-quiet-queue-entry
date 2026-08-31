@@ -39,7 +39,7 @@ Panel {
   IpcHandler { target: root.ipcTarget; function open(): void { root.openFromHotkey() } function close(): void { root.close() } function show(): void { root.openFromHotkey() } function hide(): void { root.close() } function toggle(): void { root.toggle() } function refresh(): void { if (root.hostWidget && typeof root.hostWidget.broadcast === "function") root.hostWidget.broadcast("refresh"); else root.refresh() } }
   KeyboardPanel {
     id: panel; anchorItem: root.anchorItem; owner: root.barIdentity; bar: root.bar; open: root.opened; centerOnBar: true; focusTarget: keys
-    contentWidth: panel.fittedContentWidth(Style.space(430)); contentHeight: panel.fittedContentHeight(content.implicitHeight)
+    contentWidth: panel.fittedContentWidth(Style.space(700)); contentHeight: panel.fittedContentHeight(content.implicitHeight)
     PanelKeyCatcher { id: keys; anchors.fill: parent; onCloseRequested: root.close(); onTabRequested: function(direction) { root.switchPanel(direction) }
       Column { id: content; anchors.fill: parent; spacing: Style.space(10)
         PanelHero { title: !root.loaded ? "READING QUIET MODE" : (root.state.silenced ? "NOTIFICATIONS QUEUED" : "NOTIFICATIONS FLOWING"); meta: !root.loaded ? "Checking Omarchy's local notification toggle." : (root.state.owned ? "Quiet Queue owns this focus session: " + Model.timeLabel(root.state.remaining) : (root.state.silenced ? "Silenced outside Quiet Queue. History remains available in Omarchy." : "Start a bounded quiet session. Nothing is discarded.")); foreground: root.bar ? root.bar.foreground : Color.foreground; fontFamily: root.bar ? root.bar.fontFamily : Style.font.family }

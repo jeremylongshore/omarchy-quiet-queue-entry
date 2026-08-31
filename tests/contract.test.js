@@ -23,7 +23,9 @@ test("banner names and illustrates the native focus-session product", () => {
 })
 
 test("render tooling requires current real-shell provenance and visual approval", () => {
+  const panel = read("Panel.qml")
   const render = read("scripts/rig-render.sh")
+  assert.match(panel, /contentWidth:\s*panel\.fittedContentWidth\(Style\.space\(700\)\)/)
   assert.match(render, /OMARCHY_RIG_RESOLUTION:-1280x720/)
   assert.match(render, /rawShellLogSha256/)
   assert.match(render, /visualInspection:\{status:"pending"/)
