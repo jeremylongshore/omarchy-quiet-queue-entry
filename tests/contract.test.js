@@ -29,6 +29,7 @@ test("render tooling requires current real-shell provenance and visual approval"
   assert.match(render, /visualInspection:\{status:"pending"/)
   assert.match(render, /dbus-daemon --session --fork --print-address=1 --print-pid=1/)
   assert.match(render, /export DBUS_SESSION_BUS_ADDRESS/)
+  assert.match(render, /export PATH="\\\$OMARCHY_PATH\/bin:\\\$PATH"/)
   assert.match(render, /kill "\\\$DBUS_PID"/)
   assert.match(render, /rig-render: pre-capture hook failed/)
   assert.match(render, /HOOK_OUTPUT=.*2>&1/)

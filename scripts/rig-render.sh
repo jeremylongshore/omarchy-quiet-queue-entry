@@ -131,6 +131,7 @@ else
 fi
 
 export HOME="\$RIG_ROOT" OMARCHY_PATH=/root/omarchy PLUGIN_DIR MOD
+export PATH="\$OMARCHY_PATH/bin:\$PATH"
 if [ -d "\$PLUGIN_DIR/e2e/bin" ]; then
   for fixture_command in "\$PLUGIN_DIR"/e2e/bin/*; do
     [ -f "\$fixture_command" ] || continue
