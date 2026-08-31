@@ -42,7 +42,7 @@ SOURCE_COMMIT="$(git -C "$TARGET" rev-parse HEAD 2>/dev/null || printf unknown)"
 SOURCE_DIRTY=false
 if [[ "$SOURCE_COMMIT" == "unknown" ]] || \
    [[ -n "$(git -C "$TARGET" status --porcelain --untracked-files=all -- \
-     '*.qml' '*.js' manifest.json bin preview.png README.md assets/banner.svg \
+     '*.qml' '*.js' manifest.json bin README.md assets/banner.svg \
      e2e scripts/rig-render.sh 2>/dev/null)" ]]; then
   SOURCE_DIRTY=true
 fi
@@ -71,10 +71,11 @@ SWAY_LOG=/tmp/rigrender-sway-\$RUN_ID.log
 QS_LOG=/tmp/rigrender-qs-\$RUN_ID.log
 SHOT=/tmp/rigrender-\$RUN_ID.png
 PLUGIN_DIR=\$RIG_ROOT/.config/omarchy/plugins/\$NAME
-QS_PID=""; SWAY_PID=""
+QS_PID=""; SWAY_PID=""; DBUS_PID=""
 cleanup() {
   [ -z "\$QS_PID" ] || kill "\$QS_PID" 2>/dev/null || true
   [ -z "\$SWAY_PID" ] || kill "\$SWAY_PID" 2>/dev/null || true
+  [ -z "\$DBUS_PID" ] || kill "\$DBUS_PID" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
@@ -104,6 +105,15 @@ done
 export WAYLAND_DISPLAY="\${WAYLAND_SOCKET##*/}"
 export SWAYSOCK=\$(find "\$RUNTIME" -maxdepth 1 -type s -name 'sway-ipc.*.sock' | head -1)
 [ -n "\$SWAYSOCK" ] || { echo "rig-render: isolated Sway IPC socket did not start" >&2; exit 1; }
+
+command -v dbus-daemon >/dev/null 2>&1 || {
+  echo "rig-render: dbus-daemon is required for native Omarchy services" >&2; exit 1; }
+DBUS_INFO=\$(dbus-daemon --session --fork --print-address=1 --print-pid=1)
+DBUS_SESSION_BUS_ADDRESS=\$(printf '%s\n' "\$DBUS_INFO" | sed -n '1p')
+DBUS_PID=\$(printf '%s\n' "\$DBUS_INFO" | sed -n '2p')
+[ -n "\$DBUS_SESSION_BUS_ADDRESS" ] && [ -n "\$DBUS_PID" ] || {
+  echo "rig-render: isolated D-Bus session did not start" >&2; exit 1; }
+export DBUS_SESSION_BUS_ADDRESS
 
 SETTINGS_FILE=\$PLUGIN_DIR/e2e/render-settings.json
 if [ -f "\$SETTINGS_FILE" ]; then
