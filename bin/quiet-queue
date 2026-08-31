@@ -143,8 +143,16 @@ sub write_session {
 
 sub dnd_on { (qx{omarchy-shell notifications dndState 2>/dev/null} || "") =~ /on/ }
 sub dnd_set {
-  system("omarchy-shell", "notifications", "setDnd", $_[0]) == 0
-    or die "native DND update failed\n";
+  my $pid = fork();
+  die "native DND update failed\n" unless defined $pid;
+  if ($pid == 0) {
+    open STDOUT, ">", File::Spec->devnull or exit 126;
+    open STDERR, ">", File::Spec->devnull or exit 126;
+    exec "omarchy-shell", "notifications", "setDnd", $_[0];
+    exit 127;
+  }
+  waitpid($pid, 0);
+  die "native DND update failed\n" unless $? == 0;
   my $expected = $_[0] eq "on" ? 1 : 0;
   die "native DND transition was not applied\n" unless (dnd_on() ? 1 : 0) == $expected;
 }

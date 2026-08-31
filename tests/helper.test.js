@@ -17,6 +17,7 @@ if [[ "$2" == dndState ]]; then
 elif [[ "$2" == setDnd ]]; then
   [[ "\${DND_FAIL_SET:-}" == "$3" ]] && exit 7
   [[ "\${DND_NOOP_SET:-}" == "$3" ]] || printf "%s" "$3" > "$DND_FILE"
+  printf "%s\n" "$3"
 fi
 `)
   fs.chmodSync(mock, 0o755); fs.writeFileSync(path.join(root, "dnd"), "off")
