@@ -154,7 +154,11 @@ sleep 18
 HOOK=\$PLUGIN_DIR/e2e/rig-before-capture.sh
 if [ -f "\$HOOK" ]; then
   [ -x "\$HOOK" ] || { echo "rig-render: e2e/rig-before-capture.sh is not executable" >&2; exit 1; }
-  "\$HOOK"
+  if ! HOOK_OUTPUT=\$("\$HOOK" 2>&1); then
+    echo "rig-render: pre-capture hook failed" >&2
+    printf '%s\n' "\$HOOK_OUTPUT" >&2
+    exit 1
+  fi
 fi
 
 qs -p /root/omarchy/shell ipc call "\$MOD" toggle >/dev/null 2>&1

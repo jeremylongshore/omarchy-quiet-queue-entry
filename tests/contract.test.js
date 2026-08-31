@@ -30,6 +30,8 @@ test("render tooling requires current real-shell provenance and visual approval"
   assert.match(render, /dbus-daemon --session --fork --print-address=1 --print-pid=1/)
   assert.match(render, /export DBUS_SESSION_BUS_ADDRESS/)
   assert.match(render, /kill "\\\$DBUS_PID"/)
+  assert.match(render, /rig-render: pre-capture hook failed/)
+  assert.match(render, /HOOK_OUTPUT=.*2>&1/)
   assert.match(render, /--exclude=preview\.png/)
   assert.doesNotMatch(render, /manifest\.json bin preview\.png README/)
   assert.match(read("scripts/approve-preview.sh"), /product value is visible without reading the README/)
