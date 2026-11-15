@@ -141,7 +141,10 @@ sub write_session {
   }
 }
 
-sub dnd_on { (qx{omarchy-shell notifications dndState 2>/dev/null} || "") =~ /on/ }
+# isDnd is the notifications IPC query on every Omarchy this plugin supports.
+# Omarchy a4c2a306c (2026-10-22) removed its old alias dndState, which now
+# answers "Function not found." and so read as "off" forever.
+sub dnd_on { (qx{omarchy-shell notifications isDnd 2>/dev/null} || "") =~ /on/ }
 sub dnd_set {
   my $pid = fork();
   die "native DND update failed\n" unless defined $pid;

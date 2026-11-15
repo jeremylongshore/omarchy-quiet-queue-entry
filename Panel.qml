@@ -2,6 +2,9 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+// Qt 6.12 adds its own Color type, so Omarchy's palette singleton must be
+// qualified (docs/omarchy-shell.md, Theme tokens).
+import qs.Commons as Commons
 import qs.Ui
 import "Model.js" as Model
 
@@ -42,12 +45,12 @@ Panel {
     contentWidth: panel.fittedContentWidth(Style.space(700)); contentHeight: panel.fittedContentHeight(content.implicitHeight)
     PanelKeyCatcher { id: keys; anchors.fill: parent; onCloseRequested: root.close(); onTabRequested: function(direction) { root.switchPanel(direction) }
       Column { id: content; anchors.fill: parent; spacing: Style.space(10)
-        PanelHero { title: !root.loaded ? "READING QUIET MODE" : (root.state.silenced ? "NOTIFICATIONS QUEUED" : "NOTIFICATIONS FLOWING"); meta: !root.loaded ? "Checking Omarchy's local notification toggle." : (root.state.owned ? "Quiet Queue owns this focus session: " + Model.timeLabel(root.state.remaining) : (root.state.silenced ? "Silenced outside Quiet Queue. History remains available in Omarchy." : "Start a bounded quiet session. Nothing is discarded.")); foreground: root.bar ? root.bar.foreground : Color.foreground; fontFamily: root.bar ? root.bar.fontFamily : Style.font.family }
-        PanelSeparator { foreground: root.bar ? root.bar.foreground : Color.foreground }
+        PanelHero { title: !root.loaded ? "READING QUIET MODE" : (root.state.silenced ? "NOTIFICATIONS QUEUED" : "NOTIFICATIONS FLOWING"); meta: !root.loaded ? "Checking Omarchy's local notification toggle." : (root.state.owned ? "Quiet Queue owns this focus session: " + Model.timeLabel(root.state.remaining) : (root.state.silenced ? "Silenced outside Quiet Queue. History remains available in Omarchy." : "Start a bounded quiet session. Nothing is discarded.")); foreground: root.bar ? root.bar.foreground : Commons.Color.foreground; fontFamily: root.bar ? root.bar.fontFamily : Style.font.family }
+        PanelSeparator { foreground: root.bar ? root.bar.foreground : Commons.Color.foreground }
         Rectangle { visible: root.loaded; width: parent.width - Style.space(32); x: Style.space(16); height: Style.space(62); radius: Style.space(5); readonly property real statusHue: Model.modeHue(root.state); color: Qt.hsla(statusHue, 0.46, 0.50, 0.11); border.color: Qt.hsla(statusHue, 0.55, 0.62, 0.72)
           Column { anchors.centerIn: parent; spacing: Style.space(3)
             Text { anchors.horizontalCenter: parent.horizontalCenter; text: root.state.silenced ? (root.state.owned ? "FOCUS SESSION ACTIVE" : "NATIVE DND ACTIVE") : "NOTIFICATIONS OPEN"; textFormat: Text.PlainText; color: Qt.hsla(parent.parent.statusHue, 0.56, 0.70, 1); font.family: root.bar ? root.bar.fontFamily : Style.font.family; font.bold: true; font.letterSpacing: 1 }
-            Text { anchors.horizontalCenter: parent.horizontalCenter; text: root.state.owned ? Model.timeLabel(root.state.remaining) + " REMAINING" : (root.state.silenced ? "QUIET QUEUE WILL NOT TURN THIS OFF" : "CHOOSE A BOUNDED QUIET SESSION"); textFormat: Text.PlainText; width: Style.space(330); horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight; color: root.bar ? Qt.darker(root.bar.foreground, 1.25) : Color.muted; font.family: root.bar ? root.bar.fontFamily : Style.font.family; font.pixelSize: Style.font.caption }
+            Text { anchors.horizontalCenter: parent.horizontalCenter; text: root.state.owned ? Model.timeLabel(root.state.remaining) + " REMAINING" : (root.state.silenced ? "QUIET QUEUE WILL NOT TURN THIS OFF" : "CHOOSE A BOUNDED QUIET SESSION"); textFormat: Text.PlainText; width: Style.space(330); horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight; color: root.bar ? Qt.darker(root.bar.foreground, 1.25) : Commons.Color.muted; font.family: root.bar ? root.bar.fontFamily : Style.font.family; font.pixelSize: Style.font.caption }
           }
         }
         Row { width: parent.width - Style.space(32); x: Style.space(16); spacing: Style.space(10)
@@ -60,11 +63,11 @@ Panel {
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.run(["--start", "3000"]) }
           }
         }
-        Rectangle { visible: root.state.owned; width: parent.width - Style.space(32); x: Style.space(16); height: Style.space(34); radius: Style.space(4); color: "transparent"; border.color: root.bar ? Qt.darker(root.bar.foreground, 1.45) : Color.muted; Accessible.role: Accessible.Button; Accessible.name: "End Quiet Queue session"
-          Text { anchors.centerIn: parent; text: "END THIS SESSION"; textFormat: Text.PlainText; color: root.bar ? Qt.darker(root.bar.foreground, 1.25) : Color.muted; font.family: root.bar ? root.bar.fontFamily : Style.font.family; font.pixelSize: Style.font.caption; font.bold: true }
+        Rectangle { visible: root.state.owned; width: parent.width - Style.space(32); x: Style.space(16); height: Style.space(34); radius: Style.space(4); color: "transparent"; border.color: root.bar ? Qt.darker(root.bar.foreground, 1.45) : Commons.Color.muted; Accessible.role: Accessible.Button; Accessible.name: "End Quiet Queue session"
+          Text { anchors.centerIn: parent; text: "END THIS SESSION"; textFormat: Text.PlainText; color: root.bar ? Qt.darker(root.bar.foreground, 1.25) : Commons.Color.muted; font.family: root.bar ? root.bar.fontFamily : Style.font.family; font.pixelSize: Style.font.caption; font.bold: true }
           MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.run(["--end"]) }
         }
-        Text { visible: root.loaded; text: "Omarchy keeps silenced notifications in its native history. Quiet Queue never reads notification contents."; textFormat: Text.PlainText; width: parent.width - Style.space(32); x: Style.space(16); wrapMode: Text.WordWrap; color: root.bar ? Qt.darker(root.bar.foreground, 1.35) : Color.muted; font.family: root.bar ? root.bar.fontFamily : Style.font.family; font.pixelSize: Style.font.caption }
+        Text { visible: root.loaded; text: "Omarchy keeps silenced notifications in its native history. Quiet Queue never reads notification contents."; textFormat: Text.PlainText; width: parent.width - Style.space(32); x: Style.space(16); wrapMode: Text.WordWrap; color: root.bar ? Qt.darker(root.bar.foreground, 1.35) : Commons.Color.muted; font.family: root.bar ? root.bar.fontFamily : Style.font.family; font.pixelSize: Style.font.caption }
         Item { width: 1; height: Style.space(4) }
       }
     }

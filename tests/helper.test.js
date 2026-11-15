@@ -12,8 +12,12 @@ function setup() {
   const mock = path.join(bin, "omarchy-shell")
   fs.writeFileSync(mock, `#!/usr/bin/env bash
 set -e
-if [[ "$2" == dndState ]]; then
+if [[ "$2" == isDnd ]]; then
   cat "$DND_FILE"
+elif [[ "$2" == dndState ]]; then
+  # Removed upstream in Omarchy a4c2a306c; current omarchy-shell fails it.
+  echo "Function not found." >&2
+  exit 1
 elif [[ "$2" == setDnd ]]; then
   [[ "\${DND_FAIL_SET:-}" == "$3" ]] && exit 7
   [[ "\${DND_NOOP_SET:-}" == "$3" ]] || printf "%s" "$3" > "$DND_FILE"
