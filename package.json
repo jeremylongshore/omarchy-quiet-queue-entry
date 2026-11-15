@@ -1,6 +1,6 @@
 {
   "name": "omarchy-quiet-queue-entry",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Owner-aware Omarchy notification quiet-mode harness",
   "scripts": {
