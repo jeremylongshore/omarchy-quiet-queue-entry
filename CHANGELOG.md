@@ -23,6 +23,10 @@ Nothing yet.
 
 ### Fixed
 
+- Read native Do Not Disturb with the `isDnd` IPC call. Omarchy removed the
+  old `dndState` alias on 2026-10-22, so on current Omarchy the helper always
+  read DND as off and a start failed with "native DND transition was not
+  applied".
 - Qualify Omarchy's palette as `Commons.Color`, as the shell contract requires
   now that Qt 6.12 has its own `Color` type. A contract test fails on any bare
   `Color.` in the shipped QML.

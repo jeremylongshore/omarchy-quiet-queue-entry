@@ -24,7 +24,7 @@ test("stock Perl helper scans against an empty private state root", () => {
   try {
     const bin = path.join(temp, "bin"); fs.mkdirSync(bin)
     const shell = path.join(bin, "omarchy-shell")
-    fs.writeFileSync(shell, '#!/usr/bin/env sh\n[ "$2" = dndState ] && printf off\n')
+    fs.writeFileSync(shell, '#!/usr/bin/env sh\n[ "$2" = isDnd ] && printf off\n')
     fs.chmodSync(shell, 0o755)
     const result = spawnSync(path.join(root, "bin", "quiet-queue"), ["--scan"], {
       encoding: "utf8",
