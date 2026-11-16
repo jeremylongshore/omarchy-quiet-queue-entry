@@ -9,5 +9,8 @@
 | REQ-QQ-004 | MUST | Panel.qml | Parse state fail-closed and render a bounded accurate status/countdown | L3, L5 | tests/model.test.js, tests/a11y.test.js | Covered |
 | REQ-QQ-005 | MUST | manifest.json | Run on stock Omarchy without Node or Python at runtime | L2, L6 | tests/smoke.test.js, scripts/rig-verify.sh | Covered |
 | REQ-QQ-006 | MUST | Panel.qml | Expose named button roles for start and end actions | L5, L6 | tests/a11y.test.js | Covered |
-| REQ-QQ-007 | MUST | submission process | Validate, load, activate, open, and render in the production-parity Buzz shell | L6, L7 | e2e/buzz.sh | Pending live proof |
-| REQ-QQ-008 | SHOULD | marketplace presentation | Show ownership, countdown, action hierarchy, and safe native-history behavior at a glance | L3, L6 | tests/model.test.js, tests/contract.test.js, e2e/buzz.sh | Pending hash-bound inspection |
+| REQ-QQ-007 | MUST | submission process | Validate, load, activate, open, and render in the production-parity Buzz shell | L6, L7 | e2e/buzz.sh | Covered |
+| REQ-QQ-008 | SHOULD | marketplace presentation | Show ownership, countdown, action hierarchy, and what Do Not Disturb does with notifications at a glance | L3, L6 | tests/model.test.js, tests/contract.test.js, e2e/buzz.sh | Covered |
+| REQ-QQ-009 | MUST | SECURITY.md | Treat an unreadable Do Not Disturb state as unknown, change nothing, and say so in the panel | L3, L4, L6 | tests/helper.test.js, tests/model.test.js, tests/smoke.test.js, e2e/rig-before-capture.sh, e2e/keys-unknown.sh | Covered |
+| REQ-QQ-010 | SHOULD | Panel.qml | Activate the selected row with Enter or Space exactly once, as first-party panels do | L3, L5, L6 | tests/model.test.js, tests/a11y.test.js, tests/contract.test.js, e2e/keys-owned.sh | Covered |
+| REQ-QQ-011 | MUST | manifest.json | Never claim that silenced notifications are kept or never dropped | L3 | tests/contract.test.js, tests/model.test.js | Covered |

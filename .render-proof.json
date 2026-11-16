@@ -1,27 +1,30 @@
 {
-  "fingerprint": "5f5795960709feec5e38c0b0100bc55d89fd2af2148c8f0429840e40dd75442a",
-  "sourceCommit": "4f57b5423d5bce8c99c780d41ef95ffdd8d49ebb",
+  "fingerprint": "93e821338bc80200b98a9d27fcfec2bdb9fc44582a28de48bd2ae40602c01367",
+  "sourceCommit": "a38148006814c877f6beb64ffeebe360872fd87a",
   "sourceDirty": false,
-  "sourcePackageSha256": "049951133525560b0bf0a00c134c639117081d318b4391936cafea0e6ab5524c",
-  "remotePackageSha256": "049951133525560b0bf0a00c134c639117081d318b4391936cafea0e6ab5524c",
+  "sourcePackageSha256": "76e607d16cc108c4d9cd3984b8fc277d776fad0aa8e76845c502a5647256a9c5",
+  "remotePackageSha256": "76e607d16cc108c4d9cd3984b8fc277d776fad0aa8e76845c502a5647256a9c5",
   "rig": "intent-ops-buzz/omarchy-rig",
-  "runId": "quiet-queue-187351",
-  "rawShellLogSha256": "11e0de5aca1edd9aea1275cc8d58f0e54171c51c38ae13b6ab741f2dedb6a8e9",
+  "omarchySha": "74de10479d3bf7aa7865408e33219064cfe45432",
+  "qtVersion": "qmllint 6.12.0",
+  "quickshellVersion": "Quickshell 0.3.2 (revision , distributed by Arch Linux)",
+  "runId": "quiet-queue-1951687",
+  "rawShellLogSha256": "aa3506b4b26ca2d69a1288fa1cf531a34f9f3768316c14a1503e1b819884a629",
   "packageBoundary": "runtime tree; generated proof receipts, reports, tests, developer scripts, and marketplace preview excluded",
   "evidenceBoundary": "isolated real Omarchy shell and QML under a dedicated headless compositor; plugin-specific fixture hook when present; live plugin IPC toggle; direct full-frame grim capture with no crop or image post-processing",
   "visualInspection": {
     "status": "approved",
-    "previewSha256": "85eb9663f20e8ae820e1cecaa91d845ef91e13d1e05631c5bec76976579d0f13",
+    "previewSha256": "5b56829b1448ed7d159a0b7bfe84ca76528acb073d76fd3aac89cb37be8b43b5",
     "inspector": "Claude (agent) for jeremylongshore",
-    "inspectedAt": "2026-11-15T09:29:12Z",
+    "inspectedAt": "2026-11-16T00:28:38Z",
     "checks": [
       "product value visible at marketplace scale",
       "no primary content clipped",
       "plugin-specific visual identity"
     ]
   },
-  "previewSha256": "85eb9663f20e8ae820e1cecaa91d845ef91e13d1e05631c5bec76976579d0f13",
+  "previewSha256": "5b56829b1448ed7d159a0b7bfe84ca76528acb073d76fd3aac89cb37be8b43b5",
   "dimensions": "1280 x 720",
-  "nonblackCoverage": 0.377186,
-  "capturedAt": "2026-11-15T09:28:56Z"
+  "nonblackCoverage": 0.998078,
+  "capturedAt": "2026-11-16T00:25:02Z"
 }

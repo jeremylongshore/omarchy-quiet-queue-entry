@@ -1,13 +1,16 @@
 {
-  "fingerprint": "5f5795960709feec5e38c0b0100bc55d89fd2af2148c8f0429840e40dd75442a",
-  "sourceCommit": "1757029b6e8a3dfec2c7a7f587a4e23004ac7efb",
+  "fingerprint": "93e821338bc80200b98a9d27fcfec2bdb9fc44582a28de48bd2ae40602c01367",
+  "sourceCommit": "a38148006814c877f6beb64ffeebe360872fd87a",
   "sourceDirty": false,
-  "sourcePackageSha256": "aa901b5fde5d19afc6f751b4bfceec3d2ce78c92e84777910754090d9eb23f17",
-  "remotePackageSha256": "aa901b5fde5d19afc6f751b4bfceec3d2ce78c92e84777910754090d9eb23f17",
+  "sourcePackageSha256": "a8ced371c04808d909fdd8d389b5206c9865564d295765a534badb59361cb49d",
+  "remotePackageSha256": "a8ced371c04808d909fdd8d389b5206c9865564d295765a534badb59361cb49d",
   "rig": "intent-ops-buzz/omarchy-rig",
   "evidenceBoundary": "real Omarchy validator and qmllint; no live compositor render",
+  "omarchySha": "74de10479d3bf7aa7865408e33219064cfe45432",
+  "qtVersion": "qmllint 6.12.0",
+  "quickshellVersion": "Quickshell 0.3.2 (revision , distributed by Arch Linux)",
   "omarchyPluginValidate": 0,
   "qmllintErrors": 0,
-  "validatedAtEpoch": 1794734897,
-  "validatedAt": "2026-11-15T09:28:17Z"
+  "validatedAtEpoch": 1794788661,
+  "validatedAt": "2026-11-16T00:24:21Z"
 }

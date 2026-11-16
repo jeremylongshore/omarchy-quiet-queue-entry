@@ -26,16 +26,16 @@ journeys.step_coverage_min: 100
 
 ## Installed gates (observational)
 
-L0: @intentsolutions/audit-harness 1.3.1
+L0: @intentsolutions/audit-harness 1.4.0
 L1: pre-push gate lane + GitHub Actions test/gates workflows
 L2: Perl syntax, ShellCheck, actionlint, vendored Omarchy gates, gitleaks, npm audit
-L3: node:test + c8 coverage + Stryker mutation + CRAP + three-run race stability
-L4-integration: real helper subprocess and native-DND mock fixtures
+L3: node:test + c8 coverage + Stryker mutation + three-run race stability. CRAP is NOT enforced: under audit-harness 1.4.0 crap-score scores zero functions for root-level Model.js and still reports PASS (jeremylongshore/intent-audit-harness#248); the crap.* thresholds above are policy that nothing measures yet
+L4-integration: real helper subprocess and native-DND mock fixtures, including planted failing, malformed, oversized and hanging DND reads
 L5-security: concurrent ownership, rollback, expiry, same-UID final/temp/parent racers, symlink/FIFO/oversize/path-confinement regressions
-L5-a11y: QML accessibility names/roles and bounded plain-text assertions
+L5-a11y: QML accessibility names, roles, press actions and bounded plain-text assertions
 L6-smoke: stock Perl startup and QML-to-Model contract tests
-L6-e2e: Buzz Omarchy validator, qmllint, live shell load, native DND transition, IPC open, and screenshot
-L6-visual: curated 1920x1200 active-session render inspected before submission
+L6-e2e: Buzz Omarchy validator, qmllint, live shell load, native DND transition, an unreadable-read scan against the real shell, IPC open, and screenshot; scripts/rig-keys.sh drives real keystrokes (wtype) into the real shell and counts the helper's own actions
+L6-visual: 1280x720 active-session render from the real shell, inspected and bound to its SHA-256 in .render-proof.json
 L7-UAT: primary focus and hostile-state journeys mapped in tests/JOURNEYS.md
 
 ## Frameworks (observational)
@@ -43,24 +43,24 @@ L7-UAT: primary focus and hostile-state journeys mapped in tests/JOURNEYS.md
 unit: node:test
 coverage: c8 12
 mutation: Stryker 10
-policy: @intentsolutions/audit-harness 1.3.1
+policy: @intentsolutions/audit-harness 1.4.0
 e2e: scripts/rig-verify.sh + scripts/rig-render.sh on intent-ops-buzz/omarchy-rig
 
 ## Last audit (observational)
 
-date: 2026-08-29
-grade: A (96/100)
+date: 2026-08-29 (grade not re-run for 0.2.2; the numbers below are from the 0.2.2 run)
+grade: A (96/100) from the 2026-08-29 audit-tests run under harness 1.3.1
 auditor: audit-tests + omarchy-ship
 p0_gaps: 0 after implementation
 p1_gaps: 0 after QML-specific adaptation
-p2_gaps: 0
+p2_gaps: 1 (crap-score is not enforced, see TEST_AUDIT.md)
 
 ## Traceability (observational, updated by audit-tests)
 
-rtm.total_requirements: 8
+rtm.total_requirements: 11
 rtm.by_moscow:
-  must: 7 (7 covered, 0 uncovered)
-  should: 1 (1 covered, 0 uncovered)
+  must: 9 (9 covered, 0 uncovered)
+  should: 2 (2 covered, 0 uncovered)
   could: 0
   wont: 0
 rtm.orphaned_tests: 0
@@ -69,6 +69,22 @@ personas.under_threshold: 0
 journeys.declared: 2
 journeys.fully_covered: 2
 journeys.partial: 0
+
+## Rig identity for the committed receipts (observational)
+
+rig: intent-ops-buzz/omarchy-rig container, headless sway (no live Hyprland compositor)
+omarchy: 74de10479d3bf7aa7865408e33219064cfe45432
+qt: qt6-base 6.12.0-5 (qmllint 6.12.0)
+quickshell: 0.3.2
+evidence: .rig-proof.json and .render-proof.json record the Omarchy sha, Qt and Quickshell versions
+
+## 0.2.2 run (observational)
+
+tests: 57 pass (npm test), Model.js 100% statements, branches, functions and lines
+race: three consecutive helper-suite runs, 27 tests each, zero failures
+mutation: 97.12% (236 killed, 7 survived, all equivalent), break threshold 90
+osv-scanner: no advisories on package-lock.json
+gate lane: 13 of 13 gates, vendored from contributing-clanker f79d8c7
 
 ## Hash manifest
 

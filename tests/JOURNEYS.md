@@ -6,7 +6,7 @@
 Personas: keyboard-first focus worker
 Trigger: operator opens Quiet Queue from the Omarchy bar
 Critical: true
-Linked RTM: REQ-QQ-001, REQ-QQ-004, REQ-QQ-006, REQ-QQ-007, REQ-QQ-008
+Linked RTM: REQ-QQ-001, REQ-QQ-004, REQ-QQ-006, REQ-QQ-007, REQ-QQ-008, REQ-QQ-010
 
 | # | Step | Layer | Test file | Status |
 |---|---|---|---|---|
@@ -16,15 +16,16 @@ Linked RTM: REQ-QQ-001, REQ-QQ-004, REQ-QQ-006, REQ-QQ-007, REQ-QQ-008
 | 4 | Concurrent starts retain that ownership and extend safely | L4, L5 | tests/helper.test.js | Covered |
 | 5 | Panel renders the active countdown and explicit end action | L3, L6 | tests/model.test.js, e2e/buzz.sh | Covered |
 | 6 | End restores notifications only when the session is still owned | L3, L4 | tests/helper.test.js | Covered |
+| 7 | Arrow keys, then Enter or Space, start and end a session once each | L3, L6 | tests/model.test.js, e2e/keys-owned.sh | Covered |
 
-Coverage: 6/6 steps (100%)
+Coverage: 7/7 steps (100%)
 
 ## Journey: recover safely without stealing native DND
 
 Personas: safety-conscious Omarchy operator
 Trigger: external DND changes, a failed transition, expiry, or hostile state-path replacement
 Critical: true
-Linked RTM: REQ-QQ-002, REQ-QQ-003, REQ-QQ-005
+Linked RTM: REQ-QQ-002, REQ-QQ-003, REQ-QQ-005, REQ-QQ-009
 
 | # | Step | Layer | Test file | Status |
 |---|---|---|---|---|
@@ -34,5 +35,6 @@ Linked RTM: REQ-QQ-002, REQ-QQ-003, REQ-QQ-005
 | 4 | Traverse every state component and publish through retained descriptors | L5 | tests/helper.test.js | Covered |
 | 5 | Preserve unrelated victims during final, temp, and parent racing | L5 | tests/helper.test.js, tests/fixtures | Covered |
 | 6 | Continue to run with stock Omarchy dependencies only | L2, L6 | tests/smoke.test.js, e2e/buzz.sh | Covered |
+| 7 | Report an unreadable DND state as unknown and change nothing | L4, L6 | tests/helper.test.js, e2e/rig-before-capture.sh, e2e/keys-unknown.sh | Covered |
 
-Coverage: 6/6 steps (100%)
+Coverage: 7/7 steps (100%)
