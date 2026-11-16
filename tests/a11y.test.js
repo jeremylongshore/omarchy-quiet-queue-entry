@@ -14,5 +14,10 @@ test("every quiet-session action exposes a stable accessibility name and button 
 })
 
 test("the dynamic countdown is bounded plain text", () => {
-  assert.match(panel, /text:\s*root\.state\.owned \? Model\.timeLabel\(root\.state\.remaining\)[^;]+; textFormat: Text\.PlainText; width:[^;]+;[^}]+elide: Text\.ElideRight/)
+  assert.match(panel, /text:\s*Model\.statusDetail\(root\.state\); textFormat: Text\.PlainText; width:[^;]+;[^}]+elide: Text\.ElideRight/)
+})
+
+test("every row the cursor can land on is also reachable by assistive technology", () => {
+  for (const row of [0, 1, 2]) assert.match(panel, new RegExp("Accessible\\.onPressAction:\\s*root\\.perform\\(" + row + "\\)"))
+  assert.equal((panel.match(/Text\.PlainText/g) || []).length, (panel.match(/\bText \{/g) || []).length)
 })

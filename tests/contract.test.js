@@ -11,14 +11,14 @@ test("marketplace copy uses the full contract and preserves ownership semantics"
   assert.equal(manifest.description.length, 500)
   assert.equal(manifest.barWidget.description.length, 500)
   assert.equal(manifest.barWidget.description, manifest.description)
-  for (const claim of ["25- or 50-minute", "native Do Not Disturb", "never reads, uploads, replaces, or discards", "only when it owns", "every 5 seconds"]) assert.match(manifest.description, new RegExp(claim))
+  for (const claim of ["25- or 50-minute", "native Do Not Disturb", "never reads notification contents", "only when it owns", "can't read", "every 5 seconds"]) assert.match(manifest.description, new RegExp(claim))
 })
 
 test("banner names and illustrates the native focus-session product", () => {
   const banner = read("assets/banner.svg")
   assert.match(banner, /<title id="title">Quiet Queue<\/title>/)
   assert.match(banner, /25 \/ 50 MINUTES/)
-  assert.match(banner, /NATIVE HISTORY STAYS INTACT/)
+  assert.match(banner, /NEVER READS YOUR NOTIFICATIONS/)
   assert.match(banner, /<(?:path|circle)\b/)
 })
 
@@ -42,7 +42,8 @@ test("render tooling requires current real-shell provenance and visual approval"
 
 test("render hook proves a newly-owned native DND session before capture", () => {
   const hook = read("e2e/rig-before-capture.sh")
-  assert.match(hook, /quiet-queue" --start 1500|\$helper --start 1500/)
+  assert.match(hook, /quiet-queue" --start 1500|"\$helper" --start 1500/)
+  assert.match(hook, /\.known == false and \.silenced == null and \.owned == true/)
   assert.match(hook, /\.silenced == false and \.owned == false/)
   assert.match(hook, /\.silenced == true and \.owned == true/)
   assert.match(hook, /\.until - \.now/)
@@ -66,4 +67,60 @@ test("QML qualifies Omarchy's palette as Commons.Color, never bare Color", () =>
     assert.doesNotMatch(source, /(^|[^\w.])Color\./m, file + " uses bare Color")
     if (/Commons\.Color\./.test(source)) assert.match(source, /^import qs\.Commons as Commons$/m, file)
   }
+})
+
+// Omarchy's Do Not Disturb drops transient and notify-send notifications and
+// only records the rest (shell/plugins/notifications/Delivery.js, Service.qml at
+// Omarchy 74de104). These claims were false and must not return anywhere that
+// ships to a user.
+test("no shipped surface claims silenced notifications are kept or never discarded", () => {
+  const surfaces = ["manifest.json", "README.md", "SECURITY.md", "Panel.qml", "Model.js", "assets/banner.svg", "contracts/marketplace.md"]
+  const false_claims = [
+    /nothing is discarded/i,
+    /never[^.]{0,40}\bdiscards?\b[^.]{0,20}(them|notifications)/i,
+    /stay(s)? (in|intact)/i,
+    /remains? (in|intact|available)/i,
+    /notifications queued/i,
+    /history (stays|remains)/i
+  ]
+  for (const name of surfaces) {
+    const source = read(name)
+    for (const claim of false_claims) assert.doesNotMatch(source, claim, name + " " + claim)
+  }
+})
+
+test("the panel wires Enter once and the helper dependency is documented", () => {
+  const panel = read("Panel.qml")
+  assert.match(panel, /onActivateRequested:\s*root\.activateCursor\(\)/)
+  assert.doesNotMatch(panel, /onReturnRequested/)
+  assert.match(panel, /onMoveRequested:/)
+  const readme = read("README.md")
+  assert.match(readme, /## Runtime dependencies/)
+  assert.match(readme, /#!\/usr\/bin\/perl/)
+  assert.doesNotMatch(readme, /extra runtime\.?$/m)
+  assert.doesNotMatch(readme, /\bimmediately\b/i)
+})
+
+test("rig receipts record which Omarchy, Qt and Quickshell produced them", () => {
+  for (const name of ["scripts/rig-verify.sh", "scripts/rig-render.sh"]) {
+    const source = read(name)
+    for (const field of ["omarchySha", "qtVersion", "quickshellVersion"]) assert.match(source, new RegExp(field), name + " " + field)
+  }
+  assert.match(read("scripts/rig-render.sh"), /===HOOK===/)
+  // The render runs with an isolated HOME, where git refuses the rig's root-owned
+  // Omarchy checkout as "dubious ownership" and the receipt would record unknown.
+  for (const name of ["scripts/rig-verify.sh", "scripts/rig-render.sh"]) assert.match(read(name), /git -c safe\.directory=\/root\/omarchy -C \/root\/omarchy rev-parse HEAD/, name)
+})
+
+test("the keyboard proof drives real keystrokes and counts the helper's own actions", () => {
+  for (const name of ["e2e/keys-owned.sh", "e2e/keys-unknown.sh", "scripts/rig-keys.sh"]) {
+    assert.ok(fs.statSync(path.join(root, name)).mode & 0o111, name + " is not executable")
+  }
+  const owned = read("e2e/keys-owned.sh")
+  assert.match(owned, /wtype -s \d+ -k Return/)
+  for (const log of ['"--start 1500;"', '"--start 1500;--end;"', '"--start 1500;--end;--start 1500;"']) assert.ok(owned.includes(log), log)
+  assert.match(read("e2e/keys-unknown.sh"), /\.known == false and \.silenced == null/)
+  const keys = read("scripts/rig-keys.sh")
+  assert.match(keys, /quiet-queue\.real/)
+  assert.match(keys, /scripts\/rig-render\.sh/)
 })

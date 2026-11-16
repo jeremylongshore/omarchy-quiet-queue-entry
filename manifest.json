@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "io.github.jeremylongshore.quiet-queue",
   "name": "Quiet Queue",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "author": "Jeremy Longshore",
   "license": "MIT",
-  "description": "Quiet Queue adds a trustworthy focus switch to Omarchy. Start a 25- or 50-minute session, see the countdown in the bar, and return to normal notification delivery when it expires. It uses Omarchy's native Do Not Disturb service: silenced notifications stay in first-party history, and Quiet Queue never reads, uploads, replaces, or discards them. It turns DND off only when it owns the session; existing DND is left alone, and an external change revokes stale ownership. State checks every 5 seconds.",
+  "description": "Quiet Queue adds a trustworthy focus switch to Omarchy. Start a 25- or 50-minute session, see the countdown in the bar, and return to normal notification delivery when it expires. It drives Omarchy's native Do Not Disturb, so Omarchy decides what survives: most notifications go to history, while transient and notify-send ones are dropped. Quiet Queue never reads notification contents. It turns DND off only when it owns the session, and changes nothing it can't read. State checks every 5 seconds.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Quiet Queue",
-    "description": "Quiet Queue adds a trustworthy focus switch to Omarchy. Start a 25- or 50-minute session, see the countdown in the bar, and return to normal notification delivery when it expires. It uses Omarchy's native Do Not Disturb service: silenced notifications stay in first-party history, and Quiet Queue never reads, uploads, replaces, or discards them. It turns DND off only when it owns the session; existing DND is left alone, and an external change revokes stale ownership. State checks every 5 seconds.",
+    "description": "Quiet Queue adds a trustworthy focus switch to Omarchy. Start a 25- or 50-minute session, see the countdown in the bar, and return to normal notification delivery when it expires. It drives Omarchy's native Do Not Disturb, so Omarchy decides what survives: most notifications go to history, while transient and notify-send ones are dropped. Quiet Queue never reads notification contents. It turns DND off only when it owns the session, and changes nothing it can't read. State checks every 5 seconds.",
     "category": "Info",
     "aliases": [
       "quiet-queue",

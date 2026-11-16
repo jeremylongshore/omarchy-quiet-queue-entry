@@ -32,7 +32,27 @@ test("stock Perl helper scans against an empty private state root", () => {
       timeout: 2000
     })
     assert.equal(result.status, 0, result.stderr)
-    assert.deepEqual(JSON.parse(result.stdout), { now: JSON.parse(result.stdout).now, until: 0, silenced: false, owned: false })
+    assert.deepEqual(JSON.parse(result.stdout), { now: JSON.parse(result.stdout).now, until: 0, silenced: false, owned: false, known: true })
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true })
+  }
+})
+
+test("stock Perl helper reports an unreadable DND state as unknown, not off", () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "quiet-queue-smoke-"))
+  try {
+    const bin = path.join(temp, "bin"); fs.mkdirSync(bin)
+    const shell = path.join(bin, "omarchy-shell")
+    fs.writeFileSync(shell, '#!/usr/bin/env sh\necho "omarchy-shell is not ready" >&2\nexit 1\n')
+    fs.chmodSync(shell, 0o755)
+    const result = spawnSync(path.join(root, "bin", "quiet-queue"), ["--scan"], {
+      encoding: "utf8",
+      env: { ...process.env, HOME: temp, XDG_STATE_HOME: path.join(temp, "state"), PATH: `${bin}:${process.env.PATH}` },
+      timeout: 2000
+    })
+    assert.equal(result.status, 0, result.stderr)
+    const state = JSON.parse(result.stdout)
+    assert.equal(state.known, false); assert.equal(state.silenced, null)
   } finally {
     fs.rmSync(temp, { recursive: true, force: true })
   }
