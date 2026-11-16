@@ -111,7 +111,7 @@ REMOTE_SHA="$(echo "$RESULT" | tail -n1 | awk '{print $3}')"
 # Which rig generation produced this receipt: the Omarchy checkout, the Qt that
 # qmllint belongs to, and Quickshell. Read-only, and "unknown" when it cannot be
 # read, so a receipt never claims a revision it did not observe.
-RIG_ID="$(ssh -o BatchMode=yes "$HOST" "docker exec $CONTAINER sh -c 'git -C /root/omarchy rev-parse HEAD; /usr/lib/qt6/bin/qmllint --version | head -1; qs --version | head -1'" 2>/dev/null || true)"
+RIG_ID="$(ssh -o BatchMode=yes "$HOST" "docker exec $CONTAINER sh -c 'git -c safe.directory=/root/omarchy -C /root/omarchy rev-parse HEAD; /usr/lib/qt6/bin/qmllint --version | head -1; qs --version | head -1'" 2>/dev/null || true)"
 OMARCHY_SHA="$(printf '%s\n' "$RIG_ID" | sed -n 1p)"
 [[ "$OMARCHY_SHA" =~ ^[0-9a-f]{40}$ ]] || OMARCHY_SHA=unknown
 QT_VERSION="$(printf '%s\n' "$RIG_ID" | sed -n 2p)"; [[ -n "$QT_VERSION" ]] || QT_VERSION=unknown

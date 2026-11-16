@@ -107,6 +107,9 @@ test("rig receipts record which Omarchy, Qt and Quickshell produced them", () =>
     for (const field of ["omarchySha", "qtVersion", "quickshellVersion"]) assert.match(source, new RegExp(field), name + " " + field)
   }
   assert.match(read("scripts/rig-render.sh"), /===HOOK===/)
+  // The render runs with an isolated HOME, where git refuses the rig's root-owned
+  // Omarchy checkout as "dubious ownership" and the receipt would record unknown.
+  for (const name of ["scripts/rig-verify.sh", "scripts/rig-render.sh"]) assert.match(read(name), /git -c safe\.directory=\/root\/omarchy -C \/root\/omarchy rev-parse HEAD/, name)
 })
 
 test("the keyboard proof drives real keystrokes and counts the helper's own actions", () => {

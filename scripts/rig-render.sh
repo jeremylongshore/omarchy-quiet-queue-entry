@@ -206,7 +206,7 @@ echo "===RUN=== \$RUN_ID"
 echo "===LOGSHA=== \$(sha256sum "\$QS_LOG" | awk '{print \$1}')"
 echo "===PACKAGE=== \$(sha256sum /tmp/rigrender-\$RUN_ID.tgz | awk '{print \$1}')"
 echo "===SHOT=== \$(ls -l "\$SHOT" 2>/dev/null | awk '{print \$5}') bytes"
-echo "===OMARCHY=== \$(git -C /root/omarchy rev-parse HEAD 2>/dev/null)"
+echo "===OMARCHY=== \$(git -c safe.directory=/root/omarchy -C /root/omarchy rev-parse HEAD 2>/dev/null)"
 echo "===QT=== \$(/usr/lib/qt6/bin/qmllint --version 2>/dev/null | head -1)"
 echo "===QS=== \$(qs --version 2>/dev/null | head -1)"
 REMOTE_EOF
