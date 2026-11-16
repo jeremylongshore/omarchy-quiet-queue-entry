@@ -8,6 +8,7 @@ use Fcntl qw(:DEFAULT :mode :flock);
 use File::Spec;
 use IO::Handle;
 use JSON::PP qw(encode_json decode_json);
+use POSIX ();
 
 umask 0077;
 my $SESSION = "session.json";
@@ -141,34 +142,90 @@ sub write_session {
   }
 }
 
-# isDnd is the notifications IPC query on every Omarchy this plugin supports.
-# Omarchy a4c2a306c (2026-10-22) removed its old alias dndState, which now
-# answers "Function not found." and so read as "off" forever.
-sub dnd_on { (qx{omarchy-shell notifications isDnd 2>/dev/null} || "") =~ /on/ }
+# Do Not Disturb is read with the notifications IPC query isDnd, which every
+# Omarchy shell that has this plugin API answers (Omarchy a4c2a306c, 2026-10-22,
+# removed only the older alias dndState, which answers "Function not found.").
+#
+# The answer is trusted only when the command exits 0 and prints exactly "on" or
+# "off". Anything else (the shell is restarting or "not ready", not responding,
+# an unknown function, unexpected text, no answer within the timeout) is
+# UNKNOWN, returned as undef. It is never "off": reading a failure as "off" made
+# a scan revoke ownership of a session that was still running, and the next
+# scan then refused to ever turn that silence off. Callers must change nothing
+# while the state is unknown.
+my $DND_TIMEOUT = do {
+  my $seconds = $ENV{QUIET_QUEUE_DND_TIMEOUT};
+  defined($seconds) && $seconds =~ /\A(?:[1-9]|[12]\d|30)\z/ ? 0 + $seconds : 8;
+};
+
+sub dnd_state {
+  my $pid = open(my $out, "-|");
+  return undef unless defined $pid;
+  if ($pid == 0) {
+    open STDERR, ">", File::Spec->devnull or POSIX::_exit(126);
+    exec("omarchy-shell", "notifications", "isDnd") or POSIX::_exit(127);
+  }
+  my $raw = "";
+  my $answered = eval {
+    local $SIG{ALRM} = sub { die "native DND read timed out\n" };
+    alarm($DND_TIMEOUT);
+    while (length($raw) <= 64) {
+      my $n = sysread($out, my $chunk, 64);
+      last unless defined($n) && $n > 0;
+      $raw .= $chunk;
+    }
+    alarm(0);
+    1;
+  };
+  alarm(0);
+  kill("KILL", $pid) unless $answered;
+  close($out);
+  return undef unless $answered && $? == 0;
+  return $raw =~ /\A(on|off)\s*\z/ ? ($1 eq "on" ? 1 : 0) : undef;
+}
+
 sub dnd_set {
+  my ($want) = @_;
   my $pid = fork();
   die "native DND update failed\n" unless defined $pid;
   if ($pid == 0) {
-    open STDOUT, ">", File::Spec->devnull or exit 126;
-    open STDERR, ">", File::Spec->devnull or exit 126;
-    exec "omarchy-shell", "notifications", "setDnd", $_[0];
-    exit 127;
+    open STDOUT, ">", File::Spec->devnull or POSIX::_exit(126);
+    open STDERR, ">", File::Spec->devnull or POSIX::_exit(126);
+    exec("omarchy-shell", "notifications", "setDnd", $want) or POSIX::_exit(127);
   }
   waitpid($pid, 0);
   die "native DND update failed\n" unless $? == 0;
-  my $expected = $_[0] eq "on" ? 1 : 0;
-  die "native DND transition was not applied\n" unless (dnd_on() ? 1 : 0) == $expected;
+  my $now = dnd_state();
+  die "native DND transition could not be verified\n" unless defined $now;
+  die "native DND transition was not applied\n" unless $now == ($want eq "on" ? 1 : 0);
+}
+
+sub report {
+  my ($now, $state, $silenced) = @_;
+  my $known = defined $silenced;
+  print encode_json({
+    now => $now,
+    until => $state->{until},
+    # null, not false, while the state cannot be read: a consumer that ignores
+    # "known" must not mistake an unreadable state for notifications flowing.
+    silenced => $known ? ($silenced ? JSON::PP::true() : JSON::PP::false()) : undef,
+    owned => $state->{owned} ? JSON::PP::true() : JSON::PP::false(),
+    known => $known ? JSON::PP::true() : JSON::PP::false()
+  }), "\n";
 }
 
 sub scan {
   my $now = time();
   my ($state) = read_session();
-  my $silenced = dnd_on();
+  my $silenced = dnd_state();
+  # Unknown state: report it and change nothing. No ownership is revoked, no
+  # session ends, and DND is not touched until Omarchy answers again.
+  return report($now, $state, undef) unless defined $silenced;
   # If someone turns DND off outside Quiet Queue, surrender ownership now.
   # A later external DND-on must not be disabled by our stale session record.
   if ($state->{owned} && !$silenced) { end_session(0); return scan(); }
-  if ($state->{until} > 0 && $now >= $state->{until}) { end_session(); return scan(); }
-  print encode_json({ now => $now, until => $state->{until}, silenced => $silenced ? JSON::PP::true() : JSON::PP::false(), owned => $state->{owned} ? JSON::PP::true() : JSON::PP::false() }), "\n";
+  if ($state->{until} > 0 && $now >= $state->{until}) { end_session(1, $silenced); return scan(); }
+  report($now, $state, $silenced);
 }
 
 sub start {
@@ -176,10 +233,23 @@ sub start {
   exit 2 unless defined($seconds) && $seconds =~ /\A(?:1500|3000)\z/;
   my $now = time();
   my ($previous) = read_session();
+  my $dnd = dnd_state();
+  unless (defined $dnd) {
+    print STDERR "quiet-queue: cannot read the Do Not Disturb state, so no session was started\n";
+    exit 3;
+  }
   my $owned = JSON::PP::false();
   my $enabled_now = 0;
-  if (!dnd_on()) {
-    dnd_set("on");
+  if (!$dnd) {
+    my $applied = eval { dnd_set("on"); 1 };
+    unless ($applied) {
+      my $error = $@ || "native DND update failed\n";
+      # Return to the "off" that was just read, even when the failure was an
+      # answer that could not be verified, so a half-applied change is not left
+      # behind with no session to end it.
+      eval { dnd_set("off"); 1 };
+      die $error;
+    }
     $owned = JSON::PP::true();
     $enabled_now = 1;
   } elsif ($previous->{owned} && $previous->{until} > $now) {
@@ -190,20 +260,27 @@ sub start {
   my $written = eval { write_session({ until => $now + $seconds, owned => $owned }, $dir_fh); 1 };
   unless ($written) {
     my $error = $@ || "session publication failed\n";
-    dnd_set("off") if $enabled_now;
+    eval { dnd_set("off"); 1 } if $enabled_now;
     die $error;
   }
   scan();
 }
 
+# Returns true when the session was ended, false when it was left alone because
+# the Do Not Disturb state could not be read.
 sub end_session {
-  my ($disable_owned) = @_;
+  my ($disable_owned, $observed) = @_;
   $disable_owned = 1 unless defined $disable_owned;
   my ($state, $opened) = read_session();
-  dnd_set("off") if $disable_owned && $state->{owned} && dnd_on();
+  if ($disable_owned && $state->{owned}) {
+    my $dnd = defined($observed) ? $observed : dnd_state();
+    return 0 unless defined $dnd;
+    dnd_set("off") if $dnd;
+  }
   my @named = lstat($SESSION);
   unlink($SESSION) if same_object($opened, \@named);
   $dir_fh->sync or die "session directory fsync failed\n";
+  return 1;
 }
 
 ($chain, $dir_fh) = open_state_chain();
@@ -211,5 +288,5 @@ my $session_lock = open_session_lock();
 my $op = $ARGV[0] || "--scan";
 if ($op eq "--scan") { scan() }
 elsif ($op eq "--start") { start($ARGV[1]) }
-elsif ($op eq "--end") { end_session(); scan() }
+elsif ($op eq "--end") { my $ended = end_session(); scan(); exit 3 unless $ended }
 else { exit 2 }

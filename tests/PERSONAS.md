@@ -1,5 +1,6 @@
 # Personas: Quiet Queue
 <!-- Managed by audit-tests. -->
+<!-- markdownlint-disable MD007 MD032 -->
 
 ## Keyboard-first focus worker
 

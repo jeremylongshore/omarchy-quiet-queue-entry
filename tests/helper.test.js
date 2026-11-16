@@ -12,16 +12,34 @@ function setup() {
   const mock = path.join(bin, "omarchy-shell")
   fs.writeFileSync(mock, `#!/usr/bin/env bash
 set -e
+# Every call is logged so a test can prove which ones the helper made.
+printf "%s\\n" "$*" >> "$DND_FILE.calls"
 if [[ "$2" == isDnd ]]; then
+  # DND_READ plants a failing or malformed DND read; DND_READ_FAIL_AFTER_SET
+  # makes the read fail only once a setDnd call has been made.
+  case "\${DND_READ:-ok}" in
+    ok) ;;
+    fail) echo "omarchy-shell is not ready" >&2; exit 1 ;;
+    fail-with-on) printf "on\\n"; exit 1 ;;
+    function-missing) printf "Function not found.\\n"; exit 0 ;;
+    garbage) printf "maybe\\n"; exit 0 ;;
+    empty) exit 0 ;;
+    long) head -c 5000 /dev/zero | tr "\\\\0" "x"; exit 0 ;;
+    hang) exec sleep 30 ;;
+  esac
+  if [[ "\${DND_READ_FAIL_AFTER_SET:-}" == 1 && -e "$DND_FILE.set" ]]; then
+    echo "omarchy-shell is not responding" >&2; exit 1
+  fi
   cat "$DND_FILE"
 elif [[ "$2" == dndState ]]; then
   # Removed upstream in Omarchy a4c2a306c; current omarchy-shell fails it.
   echo "Function not found." >&2
   exit 1
 elif [[ "$2" == setDnd ]]; then
+  touch "$DND_FILE.set"
   [[ "\${DND_FAIL_SET:-}" == "$3" ]] && exit 7
   [[ "\${DND_NOOP_SET:-}" == "$3" ]] || printf "%s" "$3" > "$DND_FILE"
-  printf "%s\n" "$3"
+  printf "%s\\n" "$3"
 fi
 `)
   fs.chmodSync(mock, 0o755); fs.writeFileSync(path.join(root, "dnd"), "off")
@@ -202,5 +220,110 @@ test("FIFO session is rejected without blocking a poll", () => {
   assert.equal(result.status, 0, result.stderr)
   const state = JSON.parse(result.stdout)
   assert.equal(state.until, 0); assert.equal(state.owned, false)
+  fs.rmSync(x.root, { recursive: true, force: true })
+})
+
+// An unreadable Do Not Disturb state is unknown, never "off". Every mutation
+// below is refused while the read fails, and the session record is untouched.
+const sessionPath = x => path.join(x.env.XDG_STATE_HOME, "omarchy-quiet-queue", "session.json")
+const setDndCalls = x => (fs.existsSync(`${x.env.DND_FILE}.calls`) ? fs.readFileSync(`${x.env.DND_FILE}.calls`, "utf8") : "")
+  .split("\n").filter(line => line.startsWith("notifications setDnd"))
+const READ_FAILURES = {
+  fail: "the read exits non-zero",
+  "fail-with-on": "the read prints on but exits non-zero",
+  "function-missing": "the read prints an error message and exits zero",
+  garbage: "the read prints something that is neither on nor off",
+  empty: "the read prints nothing",
+  long: "the read prints far more than a state word"
+}
+
+for (const [mode, why] of Object.entries(READ_FAILURES)) {
+  test(`scan treats an unreadable DND state as unknown and keeps the owned session (${why})`, () => {
+    const x = setup(); const started = run(x.env, "--start", "1500"); assert.equal(started.owned, true)
+    const before = fs.readFileSync(sessionPath(x), "utf8"); const callsBefore = setDndCalls(x).length
+    const unknown = run({ ...x.env, DND_READ: mode }, "--scan")
+    assert.equal(unknown.known, false); assert.equal(unknown.silenced, null)
+    assert.equal(unknown.owned, true); assert.equal(unknown.until, started.until)
+    assert.equal(fs.readFileSync(sessionPath(x), "utf8"), before)
+    assert.equal(fs.readFileSync(x.env.DND_FILE, "utf8"), "on")
+    assert.equal(setDndCalls(x).length, callsBefore)
+    // Once Omarchy answers again the session is exactly as it was left.
+    const recovered = run(x.env, "--scan")
+    assert.equal(recovered.known, true); assert.equal(recovered.silenced, true); assert.equal(recovered.owned, true)
+    assert.equal(recovered.until, started.until)
+    fs.rmSync(x.root, { recursive: true, force: true })
+  })
+}
+
+test("an unreadable DND state refuses --end without touching DND or the session", () => {
+  const x = setup(); run(x.env, "--start", "1500")
+  const before = fs.readFileSync(sessionPath(x), "utf8"); const callsBefore = setDndCalls(x).length
+  const refused = result({ ...x.env, DND_READ: "fail" }, "--end")
+  assert.equal(refused.status, 3, refused.stderr)
+  assert.equal(JSON.parse(refused.stdout).known, false)
+  assert.equal(fs.readFileSync(sessionPath(x), "utf8"), before)
+  assert.equal(fs.readFileSync(x.env.DND_FILE, "utf8"), "on")
+  assert.equal(setDndCalls(x).length, callsBefore)
+  const ended = run(x.env, "--end"); assert.equal(ended.silenced, false)
+  assert.equal(fs.readFileSync(x.env.DND_FILE, "utf8"), "off")
+  fs.rmSync(x.root, { recursive: true, force: true })
+})
+
+test("an unreadable DND state refuses --start without touching DND or creating a session", () => {
+  const x = setup()
+  const refused = result({ ...x.env, DND_READ: "fail" }, "--start", "1500")
+  assert.equal(refused.status, 3, refused.stderr); assert.match(refused.stderr, /cannot read/i)
+  assert.equal(fs.existsSync(sessionPath(x)), false)
+  assert.equal(fs.readFileSync(x.env.DND_FILE, "utf8"), "off")
+  assert.deepEqual(setDndCalls(x), [])
+  fs.rmSync(x.root, { recursive: true, force: true })
+})
+
+test("an unreadable DND state never ends an expired owned session", () => {
+  const x = setup(); const dir = path.dirname(sessionPath(x))
+  fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(sessionPath(x), '{"until":1,"owned":true}\n')
+  fs.writeFileSync(x.env.DND_FILE, "on")
+  const unknown = run({ ...x.env, DND_READ: "fail" }, "--scan")
+  assert.equal(unknown.known, false)
+  assert.equal(fs.existsSync(sessionPath(x)), true)
+  assert.equal(fs.readFileSync(x.env.DND_FILE, "utf8"), "on")
+  assert.deepEqual(setDndCalls(x), [])
+  const recovered = run(x.env, "--scan")
+  assert.equal(recovered.owned, false); assert.equal(recovered.silenced, false)
+  assert.equal(fs.existsSync(sessionPath(x)), false)
+  fs.rmSync(x.root, { recursive: true, force: true })
+})
+
+test("a DND read that hangs is cut off, reported unknown, and changes nothing", () => {
+  const x = setup(); run(x.env, "--start", "1500")
+  const before = fs.readFileSync(sessionPath(x), "utf8")
+  const began = Date.now()
+  const hung = spawnSync(helper, ["--scan"], { encoding: "utf8", timeout: 8000, env: { ...x.env, DND_READ: "hang", QUIET_QUEUE_DND_TIMEOUT: "1" } })
+  assert.equal(hung.status, 0, hung.stderr); assert.ok(Date.now() - began < 6000)
+  assert.equal(JSON.parse(hung.stdout).known, false)
+  assert.equal(fs.readFileSync(sessionPath(x), "utf8"), before)
+  assert.equal(fs.readFileSync(x.env.DND_FILE, "utf8"), "on")
+  fs.rmSync(x.root, { recursive: true, force: true })
+})
+
+test("a start whose DND transition cannot be verified rolls its own change back", () => {
+  const x = setup()
+  const failed = result({ ...x.env, DND_READ_FAIL_AFTER_SET: "1" }, "--start", "1500")
+  assert.notEqual(failed.status, 0); assert.match(failed.stderr, /could not be verified/)
+  assert.equal(fs.readFileSync(x.env.DND_FILE, "utf8"), "off")
+  assert.equal(fs.existsSync(sessionPath(x)), false)
+  assert.deepEqual(setDndCalls(x), ["notifications setDnd on", "notifications setDnd off"])
+  fs.rmSync(x.root, { recursive: true, force: true })
+})
+
+test("the DND read accepts only exactly on or off, with surrounding whitespace", () => {
+  const x = setup(); fs.writeFileSync(x.env.DND_FILE, "on\n")
+  const on = run(x.env, "--scan"); assert.equal(on.known, true); assert.equal(on.silenced, true)
+  fs.writeFileSync(x.env.DND_FILE, "off\n\n")
+  const off = run(x.env, "--scan"); assert.equal(off.known, true); assert.equal(off.silenced, false)
+  fs.writeFileSync(x.env.DND_FILE, "ON")
+  assert.equal(run(x.env, "--scan").known, false)
+  fs.writeFileSync(x.env.DND_FILE, "on off")
+  assert.equal(run(x.env, "--scan").known, false)
   fs.rmSync(x.root, { recursive: true, force: true })
 })

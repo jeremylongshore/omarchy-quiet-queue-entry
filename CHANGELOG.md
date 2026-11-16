@@ -19,6 +19,48 @@ and gate c28 refuses them.
 
 Nothing yet.
 
+## [0.2.2] - 2026-11-16
+
+### Fixed
+
+- Treat an unreadable Do Not Disturb state as unknown, never as off. The helper
+  used to read a failing `omarchy-shell` as "off", so one failed scan (for
+  example while the shell restarts) deleted the session record of a session it
+  owned, and the next scan then refused to turn that silence off. The read now
+  trusts only an exit status of 0 with exactly `on` or `off`, is bounded by a
+  timeout (8 seconds, `QUIET_QUEUE_DND_TIMEOUT` for tests), and an unknown
+  state changes nothing: scans keep ownership and never end an expired session,
+  `--start` and `--end` are refused with exit status 3, and the panel reports
+  `DND STATE UNKNOWN` and offers no action. A start whose transition cannot be
+  verified restores the "off" it read.
+- Stop claiming that silenced notifications are kept and never discarded. On
+  Omarchy 74de104 Do Not Disturb drops transient and `notify-send`
+  notifications, records most others in history, and still shows critical
+  `notify-send` alerts, action toasts and verification codes. The manifest
+  (both 500-character fields), README, SECURITY.md, panel, banner and
+  marketplace contract now say what Omarchy does. "NOTIFICATIONS QUEUED" is now
+  "NOTIFICATIONS SILENCED".
+
+### Added
+
+- Enter and Space activate the selected row, as in the first-party panels. Arrow
+  keys show and move a cursor over the 25 minute, 50 minute and end rows, and
+  `activateRequested` is the only activation wired so Enter runs once.
+- A README runtime-dependencies section: the helper is Perl (core modules only),
+  which stock Omarchy has through the base `git` package.
+- `scripts/rig-keys.sh`: real keystrokes into the real Omarchy shell on the rig,
+  counting the helper's own actions, plus the unreadable-state panel.
+- Rig receipts now record the Omarchy sha, the Qt version qmllint belongs to, and
+  the Quickshell version. A passing render hook's output is printed.
+
+### Changed
+
+- "Immediately" in the README is now "within 5 seconds", the real poll interval.
+- Refresh the lockfile so the six dev-only advisories (brace-expansion, fast-uri,
+  glob, minimatch, qs, zod) resolve to fixed versions; osv-scanner reports none.
+- Sync the vendored gate lane to canonical f79d8c7, add `.stryker-tmp/` to
+  `.gitignore`, and add a markdownlint config shared with the sibling plugins.
+
 ## [0.2.1] - 2026-11-15
 
 ### Fixed

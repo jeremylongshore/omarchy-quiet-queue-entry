@@ -108,6 +108,15 @@ REMOTE_SHA="$(echo "$RESULT" | tail -n1 | awk '{print $3}')"
 [[ "$QMLLINT"  =~ ^[0-9]+$ ]] || QMLLINT=1
 [[ "$REMOTE_SHA" == "$ARCHIVE_SHA" ]] || VALIDATE=1
 
+# Which rig generation produced this receipt: the Omarchy checkout, the Qt that
+# qmllint belongs to, and Quickshell. Read-only, and "unknown" when it cannot be
+# read, so a receipt never claims a revision it did not observe.
+RIG_ID="$(ssh -o BatchMode=yes "$HOST" "docker exec $CONTAINER sh -c 'git -C /root/omarchy rev-parse HEAD; /usr/lib/qt6/bin/qmllint --version | head -1; qs --version | head -1'" 2>/dev/null || true)"
+OMARCHY_SHA="$(printf '%s\n' "$RIG_ID" | sed -n 1p)"
+[[ "$OMARCHY_SHA" =~ ^[0-9a-f]{40}$ ]] || OMARCHY_SHA=unknown
+QT_VERSION="$(printf '%s\n' "$RIG_ID" | sed -n 2p)"; [[ -n "$QT_VERSION" ]] || QT_VERSION=unknown
+QS_VERSION="$(printf '%s\n' "$RIG_ID" | sed -n 3p)"; [[ -n "$QS_VERSION" ]] || QS_VERSION=unknown
+
 echo "  omarchy-plugin-validate: exit $VALIDATE"
 echo "  qmllint errors:          $QMLLINT"
 
@@ -116,10 +125,12 @@ echo "  qmllint errors:          $QMLLINT"
 jq -n --arg fp "$FP" --arg commit "$SOURCE_COMMIT" --argjson dirty "$SOURCE_DIRTY" \
       --arg archive "$ARCHIVE_SHA" --arg remote "$REMOTE_SHA" --arg rig "$HOST/$CONTAINER" \
       --argjson v "$VALIDATE" --argjson q "$QMLLINT" \
+      --arg omarchy "$OMARCHY_SHA" --arg qt "$QT_VERSION" --arg qs "$QS_VERSION" \
       --argjson at "$(date +%s)" --arg iso "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   '{fingerprint:$fp, sourceCommit:$commit, sourceDirty:$dirty,
     sourcePackageSha256:$archive, remotePackageSha256:$remote, rig:$rig,
     evidenceBoundary:"real Omarchy validator and qmllint; no live compositor render",
+    omarchySha:$omarchy, qtVersion:$qt, quickshellVersion:$qs,
     omarchyPluginValidate:$v, qmllintErrors:$q,
     validatedAtEpoch:$at, validatedAt:$iso}' > "$TARGET/.rig-proof.json"
 

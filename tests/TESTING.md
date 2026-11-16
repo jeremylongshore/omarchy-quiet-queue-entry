@@ -1,5 +1,6 @@
 # Testing Context: Quiet Queue
 <!-- TESTING.md schema v1. Policy defaults were scaffolded by implement-tests for engineer review. -->
+<!-- markdownlint-disable MD007 MD032 -->
 
 ## Classification (policy)
 

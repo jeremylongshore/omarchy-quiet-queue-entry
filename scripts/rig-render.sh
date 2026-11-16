@@ -189,6 +189,9 @@ if [ -f "\$HOOK" ]; then
     printf '%s\n' "\$HOOK_OUTPUT" >&2
     exit 1
   fi
+  # A passing hook's evidence lines belong in the render log too.
+  echo "===HOOK==="
+  printf '%s\n' "\$HOOK_OUTPUT"
 fi
 
 qs -p /root/omarchy/shell ipc call "\$MOD" toggle >/dev/null 2>&1
@@ -203,6 +206,9 @@ echo "===RUN=== \$RUN_ID"
 echo "===LOGSHA=== \$(sha256sum "\$QS_LOG" | awk '{print \$1}')"
 echo "===PACKAGE=== \$(sha256sum /tmp/rigrender-\$RUN_ID.tgz | awk '{print \$1}')"
 echo "===SHOT=== \$(ls -l "\$SHOT" 2>/dev/null | awk '{print \$5}') bytes"
+echo "===OMARCHY=== \$(git -C /root/omarchy rev-parse HEAD 2>/dev/null)"
+echo "===QT=== \$(/usr/lib/qt6/bin/qmllint --version 2>/dev/null | head -1)"
+echo "===QS=== \$(qs --version 2>/dev/null | head -1)"
 REMOTE_EOF
 
 scp -q -o BatchMode=yes "$REMOTE" "$HOST:/tmp/rigrender-$RUN_ID.sh" || exit 2
@@ -214,8 +220,17 @@ WARNINGS="$(printf '%s' "$RESULT" | sed -n '/===QML WARNINGS===/,/===RUN===/p' |
 SIZE="$(printf '%s' "$RESULT" | grep -oE '===SHOT=== [0-9]+' | grep -oE '[0-9]+' || true)"
 REMOTE_SHA="$(printf '%s' "$RESULT" | grep -oE '===PACKAGE=== [a-f0-9]{64}' | awk '{print $2}' || true)"
 RAW_LOG_SHA="$(printf '%s' "$RESULT" | grep -oE '===LOGSHA=== [a-f0-9]{64}' | awk '{print $2}' || true)"
+OMARCHY_SHA="$(printf '%s' "$RESULT" | grep -oE '===OMARCHY=== [a-f0-9]{40}' | awk '{print $2}' || true)"
+[[ -n "$OMARCHY_SHA" ]] || OMARCHY_SHA=unknown
+QT_VERSION="$(printf '%s\n' "$RESULT" | sed -n 's/^===QT=== //p' | head -1)"; [[ -n "$QT_VERSION" ]] || QT_VERSION=unknown
+QS_VERSION="$(printf '%s\n' "$RESULT" | sed -n 's/^===QS=== //p' | head -1)"; [[ -n "$QS_VERSION" ]] || QS_VERSION=unknown
 REMOTE_RUN_ID="$(printf '%s' "$RESULT" | grep -oE '===RUN=== [A-Za-z0-9.-]+' | awk '{print $2}' || true)"
 
+HOOK_LOG="$(printf '%s' "$RESULT" | sed -n '/===HOOK===/,/===QML WARNINGS===/p' | grep -vE '===' || true)"
+if [[ -n "$HOOK_LOG" ]]; then
+  echo "rig-render: pre-capture hook output:"
+  printf '%s\n' "$HOOK_LOG"
+fi
 if [[ -n "$WARNINGS" ]]; then
   echo "rig-render: shell warnings belong to this plugin run:" >&2
   printf '%s\n' "$WARNINGS" >&2
@@ -250,8 +265,10 @@ jq -n --arg fp "$FP" --arg commit "$SOURCE_COMMIT" --argjson dirty "$SOURCE_DIRT
   --arg run "$REMOTE_RUN_ID" --arg logSha "$RAW_LOG_SHA" --arg sha "$PREVIEW_SHA" \
   --arg dimensions "${DIMS/x/ x }" --arg coverage "$COVERAGE" \
   --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --arg omarchy "$OMARCHY_SHA" --arg qt "$QT_VERSION" --arg qs "$QS_VERSION" \
   '{fingerprint:$fp,sourceCommit:$commit,sourceDirty:$dirty,
-    sourcePackageSha256:$archive,remotePackageSha256:$remote,rig:$rig,runId:$run,rawShellLogSha256:$logSha,
+    sourcePackageSha256:$archive,remotePackageSha256:$remote,rig:$rig,
+    omarchySha:$omarchy,qtVersion:$qt,quickshellVersion:$qs,runId:$run,rawShellLogSha256:$logSha,
     packageBoundary:"runtime tree; generated proof receipts, reports, tests, developer scripts, and marketplace preview excluded",
     evidenceBoundary:"isolated real Omarchy shell and QML under a dedicated headless compositor; plugin-specific fixture hook when present; live plugin IPC toggle; direct full-frame grim capture with no crop or image post-processing",
     visualInspection:{status:"pending",previewSha256:$sha,checks:[]},
